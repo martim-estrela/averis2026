@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "733269034271",
+    "project_id": "averis-de30e",
+    "storage_bucket": "averis-de30e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:733269034271:android:f253fa9e4ea75cae1b9c2a",
+        "android_client_info": {
+          "package_name": "com.example.averis"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNmFkD37guVj2nFoo_yaDrCav-iiCvC4s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
