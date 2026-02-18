@@ -1,3 +1,5 @@
+/*
+
 import 'package:flutter/widgets.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -87,3 +89,6 @@ Future<void> seedDatabase() async {
   print('🔌 Devices: sala_tomada1, cozinha_tomada1');
   print('📊 Leituras criadas: 5 power readings');
 }
+
+
+*/
