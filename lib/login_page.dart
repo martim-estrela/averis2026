@@ -60,22 +60,67 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _resetPassword() async {
     final email = _emailCtrl.text.trim();
+
+    // Validação rápida
     if (email.isEmpty) {
-      setState(
-        () => _errorText = 'Introduz um email para recuperar a password.',
-      );
+      setState(() => _errorText = 'Por favor, introduza o seu email primeiro.');
       return;
     }
+
+    if (!email.contains('@')) {
+      setState(() => _errorText = 'Introduza um email válido.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
+
     try {
+      // ENVIA O EMAIL DE REDEFINIÇÃO
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+
       if (!mounted) return;
+
+      // MOSTRA CONFIRMAÇÃO
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email de recuperação enviado.')),
+        const SnackBar(
+          content: Text(
+            'Email de redefinição enviado! Verifique a sua caixa de entrada.',
+          ),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
       );
-    } on FirebaseAuthException catch (_) {
-      setState(
-        () => _errorText = 'Não foi possível enviar o email de recuperação.',
-      );
+
+      // Limpa o campo de password
+      _passwordCtrl.clear();
+    } on FirebaseAuthException catch (e) {
+      String message = 'Erro ao enviar email.';
+
+      switch (e.code) {
+        case 'invalid-email':
+          message = 'Email inválido.';
+          break;
+        case 'user-not-found':
+          message = 'Nenhum utilizador encontrado com este email.';
+          break;
+        default:
+          message = 'Erro: ${e.message}';
+      }
+
+      if (mounted) {
+        setState(() => _errorText = message);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _errorText = 'Erro inesperado. Tente novamente.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -166,7 +211,9 @@ class _LoginPageState extends State<LoginPage> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: _isLoading ? null : _resetPassword,
+                  onPressed: _isLoading
+                      ? null
+                      : _resetPassword, // ← FUNCIONA AQUI
                   child: const Text(
                     'Esqueceu a sua password?',
                     style: TextStyle(fontSize: 13),

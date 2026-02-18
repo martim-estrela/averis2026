@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'profile_page.dart';
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -219,6 +221,6 @@ class _PerfilView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Perfil (a implementar)'));
+    return const ProfilePage();
   }
 }
