@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -37,6 +38,18 @@ class _RegisterPageState extends State<RegisterPage> {
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text.trim(),
       );
+
+      // ← AQUI: cria documento no Firestore AUTOMATICAMENTE
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(cred.user!.uid)
+          .set({
+            'nome': _nameCtrl.text.trim(),
+            'email': _emailCtrl.text.trim(),
+            'pontos': 0,
+            'nivel': 1,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
 
       await cred.user?.updateDisplayName(_nameCtrl.text.trim());
       await cred.user?.sendEmailVerification();
