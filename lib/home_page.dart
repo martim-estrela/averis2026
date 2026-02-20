@@ -3,8 +3,8 @@ import 'profile_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'devices_page.dart';
-import 'add_device_page.dart';
 import 'readings_chart_painter.dart';
+import 'historic_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -199,7 +199,10 @@ class _DashboardView extends StatelessWidget {
               const SizedBox(height: 16),
 
               // Gráfico de consumo das últimas 24h
-              Text('Consumo últimas 24h', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Consumo últimas 24h',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -418,10 +421,9 @@ class _SimpleLineChartPainter extends CustomPainter {
 
 class _HistoricoView extends StatelessWidget {
   const _HistoricoView();
-
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Histórico (a implementar)'));
+    return const HistoricoPage();
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'add_device_page.dart';
 import 'dart:convert';
+import 'auto_detect_page.dart';
 
 class DevicesPage extends StatelessWidget {
   const DevicesPage({super.key});
@@ -17,15 +18,23 @@ class DevicesPage extends StatelessWidget {
         title: const Text('Dispositivos'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.wifi_find),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AutoDetectPage()),
+            ),
+            tooltip: 'Detetar Shelly automágico',
+          ),
+          IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const AddDevicePage()));
-            },
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AddDevicePage()),
+            ),
           ),
         ],
       ),
+
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
