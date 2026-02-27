@@ -28,8 +28,12 @@ class _AddDevicePageState extends State<AddDevicePage> {
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
-          .collection('devices') // ← subcoleção!
-          .add({
+          .collection('devices')
+          .doc(
+            'device_${DateTime.now().millisecondsSinceEpoch}',
+          ) // ✅ ID fixo e único
+          .set({
+            // ✅ .set() em vez de .add()
             'name': _nameController.text.trim(),
             'ip': _ipController.text.trim(),
             'status': 'off',

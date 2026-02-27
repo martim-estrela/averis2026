@@ -38,7 +38,7 @@ dependencies:
   cloud_firestore: ^6.1.2
   firebase_auth: ^6.1.4
   http: ^1.1.0
-  network_info_plus: ^5.0.1  # IP da tua rede
+  network_info_plus: ^5.0.1  
 
 dev_dependencies:
   flutter_test:

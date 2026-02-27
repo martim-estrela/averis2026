@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'add_device_page.dart';
 import 'dart:convert';
 import 'auto_detect_page.dart';
+import 'smart_plug_service.dart';
 
 class DevicesPage extends StatelessWidget {
   const DevicesPage({super.key});
@@ -88,7 +89,7 @@ class DevicesPage extends StatelessWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: devices.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final deviceDoc = devices[index];
               final deviceData = deviceDoc.data() as Map<String, dynamic>;
@@ -102,20 +103,24 @@ class DevicesPage extends StatelessWidget {
                   }); // ← OK aqui
                 },
                 onToggle: (isOn) async {
-                  // ← AQUI CORRIGIR
                   final ip = deviceData['ip'] as String;
+                  final type = deviceData['type'] ?? 'shelly'; // ← NOVO!
                   final deviceRef = deviceDoc.reference;
                   final userId = FirebaseAuth.instance.currentUser!.uid;
 
-                  // Liga/desliga Shelly
-                  final success = await _toggleShelly(ip, isOn);
+                  // Multi-marca!  ← ✅ SHELLY + TP-LINK + SONOFF
+                  final success = await SmartPlugService.toggle(ip, type, isOn);
 
                   if (success) {
-                    // Atualiza status no Firestore
                     await deviceRef.update({'status': isOn ? 'on' : 'off'});
 
-                    // Guarda reading (sem widget!)
-                    await _saveReading(ip, deviceDoc.id, userId);
+                    // Lê consumo multi-marca  ← ✅ TODAS MARCAS
+                    await SmartPlugService.readAndStore(
+                      ip,
+                      deviceDoc.id,
+                      userId,
+                      type,
+                    );
                   }
                 },
 

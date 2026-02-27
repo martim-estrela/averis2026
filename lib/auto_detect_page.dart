@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:http/http.dart' as http;
@@ -14,7 +13,7 @@ class AutoDetectPage extends StatefulWidget {
 }
 
 class _AutoDetectPageState extends State<AutoDetectPage> {
-  final List<ShellyDevice> _finalShellyDevices = [];
+  final List<SmartPlugDevice> _finalSmartPlugDevices = [];
   bool _isScanning = false;
 
   @override
@@ -59,7 +58,7 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
           ),
 
           Expanded(
-            child: _finalShellyDevices.isEmpty
+            child: _finalSmartPlugDevices.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -82,10 +81,10 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _finalShellyDevices.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemCount: _finalSmartPlugDevices.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
-                      final device = _finalShellyDevices[index];
+                      final device = _finalSmartPlugDevices[index];
                       return Card(
                         elevation: 2,
                         child: ListTile(
@@ -108,7 +107,7 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
                           ),
                           subtitle: Text('IP: ${device.ip}'),
                           trailing: ElevatedButton(
-                            onPressed: () => _addShelly(device),
+                            onPressed: () => _addSmartPlug(device),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
@@ -128,7 +127,7 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
   Future<void> _scanNetwork() async {
     setState(() {
       _isScanning = true;
-      _finalShellyDevices.clear();
+      _finalSmartPlugDevices.clear();
     });
 
     try {
@@ -150,14 +149,14 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
       ).showSnackBar(SnackBar(content: Text('Escaneando $baseIP.1-254...')));
 
       // 2. Testa IPs 1-254 (simples mas eficaz)
-      final List<ShellyDevice> foundDevices = [];
+      final List<SmartPlugDevice> foundDevices = [];
 
       await Future.wait(
         List.generate(254, (i) async {
           final testIP = '$baseIP.${i + 1}';
-          final shelly = await _testShelly(testIP);
-          if (shelly != null) {
-            foundDevices.add(shelly);
+          final smartPlug = await _testSmartPlug(testIP);
+          if (smartPlug != null) {
+            foundDevices.add(smartPlug);
           }
         }),
         eagerError: true,
@@ -165,7 +164,7 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
 
       if (mounted) {
         setState(() {
-          _finalShellyDevices.addAll(foundDevices);
+          _finalSmartPlugDevices.addAll(foundDevices);
         });
 
         if (foundDevices.isEmpty) {
@@ -178,7 +177,7 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Encontrados ${_finalShellyDevices.length} Smart Plugs!',
+                'Encontrados ${_finalSmartPlugDevices.length} Smart Plugs!',
               ),
             ),
           );
@@ -197,13 +196,30 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
     }
   }
 
-  Future<ShellyDevice?> _testShelly(String ip) async {
+  Future<SmartPlugDevice?> _testSmartPlug(String ip) async {
     try {
-      // Testa endpoints típicos do Shelly
+      // Testa 15+ marcas de smart plugs
       final endpoints = [
+        // Shelly
         'http://$ip/rpc/Shelly.GetStatus',
         'http://$ip/status',
+
+        // TP-Link Kasa/HS100/HS110
+        'http://$ip/api/system/get_sysinfo',
+
+        // Sonoff
+        'http://$ip/app?typ=login',
+
+        // Tuya / Smart Life
+        'http://$ip/v1.0/iot-03/devices/connect/status',
+
+        // Meross
+        'http://$ip/.well-known/apple-app-site-association',
+
+        // Genéricos (HTTP 200 + JSON)
+        'http://$ip/',
         'http://$ip/meta',
+        'http://$ip/info',
       ];
 
       for (final endpoint in endpoints) {
@@ -216,27 +232,67 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
               .timeout(const Duration(seconds: 1));
 
           if (response.statusCode == 200) {
-            final data = jsonDecode(response.body);
-            // Verifica se é Shelly
-            if (data['restart_required'] != null ||
-                data['auth_req'] == false ||
-                data['mac'] != null ||
-                response.body.contains('shelly') ||
-                response.body.contains('Shelly')) {
-              return ShellyDevice(ip: ip, name: 'Shelly ${ip.split('.').last}');
+            final body = response.body.toLowerCase();
+
+            // Identifica por marca ou padrões
+            if (body.contains('shelly') || body.contains('restart_required')) {
+              return SmartPlugDevice(
+                ip: ip,
+                name: 'Shelly Plug',
+                type: 'shelly',
+              );
+            }
+            if (body.contains('tp-link') ||
+                body.contains('kasa') ||
+                body.contains('sysinfo')) {
+              return SmartPlugDevice(
+                ip: ip,
+                name: 'TP-Link Kasa',
+                type: 'tplink',
+              );
+            }
+            if (body.contains('sonoff') || body.contains('itead')) {
+              return SmartPlugDevice(ip: ip, name: 'Sonoff', type: 'sonoff');
+            }
+            if (body.contains('tuya') || body.contains('smartlife')) {
+              return SmartPlugDevice(
+                ip: ip,
+                name: 'Tuya/Smart Life',
+                type: 'tuya',
+              );
+            }
+            if (body.contains('meross')) {
+              return SmartPlugDevice(ip: ip, name: 'Meross', type: 'meross');
+            }
+
+            // Qualquer JSON device que responde HTTP 200
+            try {
+              final data = jsonDecode(response.body);
+              if (data is Map &&
+                  (data['power'] != null ||
+                      data['status'] != null ||
+                      data['relay'] != null)) {
+                return SmartPlugDevice(
+                  ip: ip,
+                  name: 'Smart Plug',
+                  type: 'generic',
+                );
+              }
+            } catch (e) {
+              // Não é JSON válido
             }
           }
         } catch (e) {
-          // Endpoint não responde, continua
+          // Endpoint específico falhou, continua
         }
       }
     } catch (e) {
-      // IP não responde, continua
+      // IP não responde
     }
     return null;
   }
 
-  Future<void> _addShelly(ShellyDevice device) async {
+  Future<void> _addSmartPlug(SmartPlugDevice device) async {
     final userId = FirebaseAuth.instance.currentUser!.uid;
 
     try {
@@ -247,8 +303,8 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
           .add({
             'name': device.name,
             'ip': device.ip,
+            'type': device.type, // ← shelly, tplink, etc!
             'status': 'off',
-            'type': 'shelly-plug',
             'createdAt': FieldValue.serverTimestamp(),
           });
 
@@ -271,9 +327,10 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
   }
 }
 
-class ShellyDevice {
+class SmartPlugDevice {
   final String ip;
   final String name;
+  final String type; // shelly, tplink, sonoff, tuya, meross, generic
 
-  ShellyDevice({required this.ip, required this.name});
+  SmartPlugDevice({required this.ip, required this.name, required this.type});
 }
