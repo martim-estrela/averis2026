@@ -1,5 +1,4 @@
 import 'package:multicast_dns/multicast_dns.dart';
-import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'shelly_discovery.dart';
