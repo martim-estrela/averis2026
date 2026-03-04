@@ -159,51 +159,6 @@ class DevicesPage extends StatelessWidget {
       ),
     );
   }
-
-  Future<bool> _toggleShelly(String ip, bool turnOn) async {
-    try {
-      final url = Uri.parse('http://$ip/relay/0?turn=${turnOn ? "on" : "off"}');
-      final response = await http.get(url);
-      return response.statusCode == 200;
-    } catch (e) {
-      print('Erro Shelly $ip: $e');
-      return false;
-    }
-  }
-
-  Future<void> _saveReading(String ip, String deviceId, String userId) async {
-    try {
-      final statusUrl = Uri.parse('http://$ip/status');
-      final statusResponse = await http.get(statusUrl);
-
-      if (statusResponse.statusCode == 200) {
-        final statusData = json.decode(statusResponse.body);
-        final meters = statusData['meters'] as List?;
-
-        if (meters != null && meters.isNotEmpty) {
-          final meter = meters[0];
-          final powerW = (meter['power'] ?? 0).toDouble();
-          final totalKwh = (meter['total'] ?? 0).toDouble() / 1000;
-
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userId)
-              .collection('devices')
-              .doc(deviceId)
-              .collection('readings')
-              .doc(DateTime.now().millisecondsSinceEpoch.toString())
-              .set({
-                'powerW': powerW,
-                'totalKwh': totalKwh,
-                'voltage': meter['voltage'] ?? 0.0,
-                'timestamp': FieldValue.serverTimestamp(),
-              });
-        }
-      }
-    } catch (e) {
-      print('Erro reading $ip: $e');
-    }
-  }
 }
 
 class DeviceCard extends StatefulWidget {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'multicast_dns.dart';
+import 'shelly_discovery.dart';
 
 class AddDevicePage extends StatefulWidget {
   const AddDevicePage({super.key});
@@ -15,6 +17,35 @@ class _AddDevicePageState extends State<AddDevicePage> {
   final _ipController = TextEditingController();
   bool _isLoading = false;
 
+  // descoberta automática
+  bool _isScanning = false;
+  List<DiscoveredShelly> _found = [];
+  final ShellyDiscovery _discovery = MdnsShellyDiscovery();
+
+  Future<void> _scanShellys() async {
+    setState(() {
+      _isScanning = true;
+      _found = [];
+    });
+    try {
+      final devices = await _discovery.discover(
+        timeout: const Duration(seconds: 8),
+      );
+      setState(() {
+        _found = devices;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro ao procurar dispositivos Shelly.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isScanning = false);
+      }
+    }
+  }
+
   Future<void> _addDevice() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -23,17 +54,12 @@ class _AddDevicePageState extends State<AddDevicePage> {
     try {
       final userId = FirebaseAuth.instance.currentUser!.uid;
 
-      // Cria o dispositivo no Firestore
-
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('devices')
-          .doc(
-            'device_${DateTime.now().millisecondsSinceEpoch}',
-          ) // ✅ ID fixo e único
+          .doc('device_${DateTime.now().millisecondsSinceEpoch}')
           .set({
-            // ✅ .set() em vez de .add()
             'name': _nameController.text.trim(),
             'ip': _ipController.text.trim(),
             'status': 'off',
@@ -43,7 +69,6 @@ class _AddDevicePageState extends State<AddDevicePage> {
 
       if (!mounted) return;
 
-      // Sucesso!
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Dispositivo adicionado com sucesso!'),
@@ -51,13 +76,12 @@ class _AddDevicePageState extends State<AddDevicePage> {
         ),
       );
 
-      // Volta para trás (Dashboard atualiza automaticamente)
       Navigator.of(context).pop();
     } on FirebaseException catch (e) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Erro: ${e.message}')));
-    } catch (e) {
+    } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erro inesperado. Tente novamente.')),
       );
@@ -116,13 +140,32 @@ class _AddDevicePageState extends State<AddDevicePage> {
                 ),
                 const SizedBox(height: 32),
 
+                // botão de descoberta automática
+                ElevatedButton.icon(
+                  onPressed: _isScanning ? null : _scanShellys,
+                  icon: _isScanning
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.search),
+                  label: Text(
+                    _isScanning ? 'A procurar...' : 'Procurar Shelly na rede',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade100,
+                    foregroundColor: Colors.blue.shade900,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 // Nome do dispositivo
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
                     labelText: 'Nome do dispositivo',
                     hintText: 'Ex: Tomada Cozinha, Frigorífico',
-
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
@@ -140,7 +183,9 @@ class _AddDevicePageState extends State<AddDevicePage> {
                 // IP do Shelly
                 TextFormField(
                   controller: _ipController,
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Endereço IP do Shelly',
                     hintText: 'Ex: 192.168.1.64',
@@ -184,6 +229,42 @@ class _AddDevicePageState extends State<AddDevicePage> {
                     return null;
                   },
                 ),
+
+                // lista de dispositivos encontrados
+                if (_found.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Dispositivos encontrados:',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _found.length,
+                    itemBuilder: (context, index) {
+                      final d = _found[index];
+                      return Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.power),
+                          title: Text(d.name),
+                          subtitle: Text(d.ip),
+                          trailing: const Icon(Icons.add),
+                          onTap: () {
+                            _nameController.text = d.name;
+                            _ipController.text = d.ip;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Shelly selecionada: ${d.name}'),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ],
+
                 const SizedBox(height: 24),
 
                 // Botão adicionar
@@ -228,7 +309,8 @@ class _AddDevicePageState extends State<AddDevicePage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'O dispositivo será adicionado e aparecerá no Dashboard. Podes ligar/desligar e ver o consumo em tempo real.',
+                          'O dispositivo será adicionado e aparecerá no Dashboard. '
+                          'Podes ligar/desligar e ver o consumo em tempo real.',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.amber.shade800,
                           ),

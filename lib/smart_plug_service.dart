@@ -14,6 +14,7 @@ class SmartPlugService {
     try {
       switch (deviceType.toLowerCase()) {
         case 'shelly':
+        case 'shelly-plug': // ← garante que o tipo gravado no Firestore também apanha aqui
           return await _toggleShelly(deviceIp, turnOn);
         case 'tplink':
           return await _toggleTPLink(deviceIp, turnOn);
@@ -41,10 +42,12 @@ class SmartPlugService {
     try {
       switch (deviceType.toLowerCase()) {
         case 'shelly':
+        case 'shelly-plug':
           return await _readShellyAndStore(deviceIp, deviceId, userId);
         case 'tplink':
           return await _readTPLinkAndStore(deviceIp, deviceId, userId);
         default:
+          // fallback Shelly
           return await _readShellyAndStore(deviceIp, deviceId, userId);
       }
     } catch (e) {
@@ -72,11 +75,11 @@ class SmartPlugService {
 
     if (response.statusCode != 200) return null;
 
-    final data = json.decode(response.body);
-    final meters = data['meters'] as List?;
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final meters = data['meters'] as List<dynamic>?;
     if (meters == null || meters.isEmpty) return null;
 
-    final meter = meters[0];
+    final meter = meters[0] as Map<String, dynamic>;
     final powerW = (meter['power'] ?? 0).toDouble();
     final totalKwh = (meter['total'] ?? 0).toDouble() / 1000;
 
@@ -85,13 +88,13 @@ class SmartPlugService {
       userId,
       powerW,
       totalKwh,
-      meter['voltage'] ?? 0.0,
+      (meter['voltage'] ?? 0.0).toDouble(),
     );
 
     return {
       'powerW': powerW,
       'totalKwh': totalKwh,
-      'voltage': meter['voltage'] ?? 0.0,
+      'voltage': (meter['voltage'] ?? 0.0).toDouble(),
     };
   }
 
@@ -114,9 +117,11 @@ class SmartPlugService {
 
     if (response.statusCode != 200) return null;
 
-    // TP-Link HS110 parsing (emeter)
-    final data = json.decode(response.body);
-    final emeter = data['emeter']['get_realtime'] ?? {};
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final emeter =
+        (data['emeter'] as Map<String, dynamic>?)?['get_realtime']
+            as Map<String, dynamic>? ??
+        {};
     final powerW = (emeter['power'] ?? 0).toDouble();
     final totalKwh = (emeter['total'] ?? 0).toDouble();
 

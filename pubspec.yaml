@@ -39,6 +39,7 @@ dependencies:
   firebase_auth: ^6.1.4
   http: ^1.1.0
   network_info_plus: ^5.0.1  
+  multicast_dns: ^0.3.3
 
 dev_dependencies:
   flutter_test:
