@@ -68,34 +68,23 @@ class SmartPlugService {
     String deviceId,
     String userId,
   ) async {
-    final statusUrl = Uri.parse('http://$ip/status');
+    final meterUrl = Uri.parse('http://$ip/meter/0');
     final response = await http
-        .get(statusUrl)
+        .get(meterUrl)
         .timeout(const Duration(seconds: 5));
 
     if (response.statusCode != 200) return null;
 
     final data = json.decode(response.body) as Map<String, dynamic>;
-    final meters = data['meters'] as List<dynamic>?;
-    if (meters == null || meters.isEmpty) return null;
 
-    final meter = meters[0] as Map<String, dynamic>;
-    final powerW = (meter['power'] ?? 0).toDouble();
-    final totalKwh = (meter['total'] ?? 0).toDouble() / 1000;
+    // Para /meter/0 o formato é diferente:
+    final powerW = (data['0']['power'] ?? 0).toDouble();
+    final totalKwh = (data['0']['total'] ?? 0).toDouble() / 1000;
+    final voltage = (data['0']['voltage'] ?? 0).toDouble();
 
-    await _saveReading(
-      deviceId,
-      userId,
-      powerW,
-      totalKwh,
-      (meter['voltage'] ?? 0.0).toDouble(),
-    );
+    await _saveReading(deviceId, userId, powerW, totalKwh, voltage);
 
-    return {
-      'powerW': powerW,
-      'totalKwh': totalKwh,
-      'voltage': (meter['voltage'] ?? 0.0).toDouble(),
-    };
+    return {'powerW': powerW, 'totalKwh': totalKwh, 'voltage': voltage};
   }
 
   // === TP-LINK ===

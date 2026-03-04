@@ -19,14 +19,6 @@ class DevicesPage extends StatelessWidget {
         title: const Text('Dispositivos'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.wifi_find),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AutoDetectPage()),
-            ),
-            tooltip: 'Detetar Shelly automágico',
-          ),
-          IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => Navigator.push(
               context,
