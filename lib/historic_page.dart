@@ -167,8 +167,9 @@ class _HistoricoPageState extends State<HistoricoPage> {
     return StreamBuilder<List<DailyStats>>(
       stream: _getDailyStatsStream(userId),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         final dias = snapshot.data!;
         if (dias.isEmpty) return const Center(child: Text('Sem dados'));
@@ -204,7 +205,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
               ),
             );
           },
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
         );
       },
     );
@@ -214,8 +215,9 @@ class _HistoricoPageState extends State<HistoricoPage> {
     return StreamBuilder<List<DeviceStats>>(
       stream: _getDeviceRankingStream(userId),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final ranking = snapshot.data!;
 
         return ListView.separated(
@@ -233,7 +235,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
               ),
             );
           },
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
         );
       },
     );

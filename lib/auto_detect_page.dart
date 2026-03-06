@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:http/http.dart' as http;
@@ -173,7 +172,7 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
                           child: ListView.separated(
                             padding: const EdgeInsets.symmetric(horizontal: 24),
                             itemCount: _foundDevices.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final device = _foundDevices[index];

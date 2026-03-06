@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
 import 'add_device_page.dart';
-import 'dart:convert';
-import 'auto_detect_page.dart';
-import 'smart_plug_service.dart';
+import 'services/smart_plug_service.dart';
 
 class DevicesPage extends StatelessWidget {
   const DevicesPage({super.key});
