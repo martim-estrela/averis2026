@@ -39,9 +39,9 @@ class ShellyMetrics {
 
   factory ShellyMetrics.empty() => ShellyMetrics(
     powerW: 0,
-    voltageV: 0,
+    voltageV: 230,
     currentA: 0,
-    frequencyHz: 0,
+    frequencyHz: 50,
     totalWh: 0,
   );
 

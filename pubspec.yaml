@@ -40,6 +40,9 @@ dependencies:
   http: ^1.1.0
   network_info_plus: ^5.0.1  
   multicast_dns: ^0.3.3
+  pdf: ^3.10.8
+  printing: ^5.13.1
+  wifi_iot: ^0.3.19
 
 dev_dependencies:
   flutter_test:

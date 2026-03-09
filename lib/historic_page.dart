@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math' as math;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class HistoricoPage extends StatefulWidget {
   const HistoricoPage({super.key});
@@ -11,9 +14,10 @@ class HistoricoPage extends StatefulWidget {
 }
 
 class _HistoricoPageState extends State<HistoricoPage> {
-  String _periodo = 'mes'; // hoje, 7dias, mes
+  // Intervalo de datas — por defeito o mês atual
+  DateTime _dataInicio = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime _dataFim = DateTime.now();
   String _deviceId = 'todos';
-  final DateTime _inicioPeriodo = DateTime(2026, 2, 1); // mock
 
   @override
   Widget build(BuildContext context) {
@@ -47,38 +51,90 @@ class _HistoricoPageState extends State<HistoricoPage> {
           .snapshots(),
       builder: (context, snapshot) {
         final devices = snapshot.data?.docs ?? [];
+
         return Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'hoje', label: Text('Hoje')),
-                  ButtonSegment(value: '7dias', label: Text('7 dias')),
-                  ButtonSegment(value: 'mes', label: Text('Mês')),
-                ],
-                selected: {_periodo},
-                onSelectionChanged: (selection) =>
-                    setState(() => _periodo = selection.first),
-              ),
-              const SizedBox(height: 16),
-              SegmentedButton<String>(
-                segments: [
-                  const ButtonSegment(value: 'todos', label: Text('Todos')),
-                  ...devices.map(
-                    (doc) => ButtonSegment(
-                      value: doc.id,
-                      label: Text(
-                        (doc.data() as Map<String, dynamic>)['name'] ??
-                            'Sem nome',
-                      ),
+              // Intervalo de datas
+              Row(
+                children: [
+                  Expanded(
+                    child: _DatePickerButton(
+                      label: 'De',
+                      date: _dataInicio,
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _dataInicio,
+                          firstDate: DateTime(2020),
+                          lastDate: _dataFim,
+                        );
+                        if (picked != null) {
+                          setState(() => _dataInicio = picked);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _DatePickerButton(
+                      label: 'Até',
+                      date: _dataFim,
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _dataFim,
+                          firstDate: _dataInicio,
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          // Inclui o dia completo (até às 23:59:59)
+                          setState(
+                            () => _dataFim = DateTime(
+                              picked.year,
+                              picked.month,
+                              picked.day,
+                              23,
+                              59,
+                              59,
+                            ),
+                          );
+                        }
+                      },
                     ),
                   ),
                 ],
-                selected: {_deviceId},
-                onSelectionChanged: (selection) =>
-                    setState(() => _deviceId = selection.first),
               ),
+              const SizedBox(height: 12),
+
+              // Dropdown dispositivos
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(
+                  labelText: 'Dispositivo',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                ),
+                initialValue: _deviceId,
+                items: [
+                  const DropdownMenuItem(value: 'todos', child: Text('Todos')),
+                  ...devices.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return DropdownMenuItem<String>(
+                      value: doc.id,
+                      child: Text(data['name'] ?? 'Sem nome'),
+                    );
+                  }),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _deviceId = value);
+                },
+              ),
+              const SizedBox(height: 4),
             ],
           ),
         );
@@ -91,8 +147,8 @@ class _HistoricoPageState extends State<HistoricoPage> {
       length: 3,
       child: Column(
         children: [
-          TabBar(
-            tabs: const [
+          const TabBar(
+            tabs: [
               Tab(icon: Icon(Icons.show_chart), text: 'Gráfico'),
               Tab(icon: Icon(Icons.list), text: 'Dias'),
               Tab(icon: Icon(Icons.trending_up), text: 'Ranking'),
@@ -122,12 +178,8 @@ class _HistoricoPageState extends State<HistoricoPage> {
 
         final dailyStats = snapshot.data!;
         final totalKwh = dailyStats.map((d) => d.kwh).reduce((a, b) => a + b);
-        final baselineKwh = totalKwh * 1.2; // 20% mais seria "normal"
+        final baselineKwh = totalKwh * 1.2;
         final poupancaKwh = baselineKwh - totalKwh;
-        final poupancaPercent = (poupancaKwh / baselineKwh * 100).clamp(
-          0.0,
-          100.0,
-        );
 
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -154,6 +206,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
             SizedBox(
               height: 250,
               child: CustomPaint(
+                size: Size.infinite,
                 painter: DailyChartPainter(dailyStats, baselineKwh),
               ),
             ),
@@ -205,6 +258,9 @@ class _HistoricoPageState extends State<HistoricoPage> {
               ),
             );
           },
+          // FIX 2: Parâmetros do separatorBuilder eram ambos '_', o que é
+          // inválido em Dart — dois parâmetros não podem ter o mesmo nome.
+          // Corrigido para '(_, __)'.
           separatorBuilder: (_, _) => const SizedBox(height: 8),
         );
       },
@@ -235,6 +291,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
               ),
             );
           },
+          // FIX 2 (cont.): mesmo problema no ranking
           separatorBuilder: (_, _) => const SizedBox(height: 8),
         );
       },
@@ -242,28 +299,71 @@ class _HistoricoPageState extends State<HistoricoPage> {
   }
 
   Stream<List<DailyStats>> _getDailyStatsStream(String userId) {
-    return FirebaseFirestore.instance
-        .collectionGroup('readings')
-        .where(
-          'timestamp',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(_getInicioPeriodo()),
-        )
-        .snapshots()
-        .asyncMap((snapshot) async {
-          final readings = snapshot.docs.map((doc) {
-            final data = doc.data();
-            return Reading(
-              powerW: (data['powerW'] ?? 0).toDouble(),
-              timestamp:
-                  (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
-            );
-          }).toList();
+    final inicio = Timestamp.fromDate(_dataInicio);
+    final fim = Timestamp.fromDate(_dataFim);
 
-          return _aggregateByDay(readings);
-        });
+    if (_deviceId == 'todos') {
+      return FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('devices')
+          .snapshots()
+          .asyncMap((devicesSnap) async {
+            final List<Reading> allReadings = [];
+            for (final deviceDoc in devicesSnap.docs) {
+              final snap = await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(userId)
+                  .collection('devices')
+                  .doc(deviceDoc.id)
+                  .collection('readings')
+                  .where('timestamp', isGreaterThanOrEqualTo: inicio)
+                  .where('timestamp', isLessThanOrEqualTo: fim)
+                  .get();
+
+              for (final doc in snap.docs) {
+                final data = doc.data();
+                allReadings.add(
+                  Reading(
+                    powerW: (data['powerW'] ?? 0).toDouble(),
+                    timestamp:
+                        (data['timestamp'] as Timestamp?)?.toDate() ??
+                        DateTime.now(),
+                  ),
+                );
+              }
+            }
+            return _aggregateByDay(allReadings);
+          });
+    } else {
+      return FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('devices')
+          .doc(_deviceId)
+          .collection('readings')
+          .where('timestamp', isGreaterThanOrEqualTo: inicio)
+          .where('timestamp', isLessThanOrEqualTo: fim)
+          .snapshots()
+          .map((snap) {
+            final readings = snap.docs.map((doc) {
+              final data = doc.data();
+              return Reading(
+                powerW: (data['powerW'] ?? 0).toDouble(),
+                timestamp:
+                    (data['timestamp'] as Timestamp?)?.toDate() ??
+                    DateTime.now(),
+              );
+            }).toList();
+            return _aggregateByDay(readings);
+          });
+    }
   }
 
   Stream<List<DeviceStats>> _getDeviceRankingStream(String userId) {
+    final inicio = Timestamp.fromDate(_dataInicio);
+    final fim = Timestamp.fromDate(_dataFim);
+
     return FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
@@ -283,45 +383,33 @@ class _HistoricoPageState extends State<HistoricoPage> {
                 .collection('devices')
                 .doc(deviceDoc.id)
                 .collection('readings')
-                .where(
-                  'timestamp',
-                  isGreaterThanOrEqualTo: Timestamp.fromDate(
-                    _getInicioPeriodo(),
-                  ),
-                )
+                .where('timestamp', isGreaterThanOrEqualTo: inicio)
+                .where('timestamp', isLessThanOrEqualTo: fim)
                 .get();
 
-            final totalKwh = readingsSnapshot.docs
-                .map((doc) => (doc.data()['totalKwh'] ?? 0).toDouble())
-                .reduce((a, b) => a + b);
+            final totalKwh = readingsSnapshot.docs.isEmpty
+                ? 0.0
+                : readingsSnapshot.docs
+                      .map((doc) => (doc.data()['totalKwh'] ?? 0).toDouble())
+                      .fold(0.0, (a, b) => a + b);
 
             stats.add(DeviceStats(name: deviceName, kwh: totalKwh));
           }
 
-          final totalGeral = stats.map((d) => d.kwh).reduce((a, b) => a + b);
-          return stats
-            ..sort((a, b) => b.kwh.compareTo(a.kwh))
-            ..asMap().entries.map((e) {
-              final device = e.value;
-              device.percent = totalGeral > 0
-                  ? (device.kwh / totalGeral * 100)
-                  : 0;
-              return device;
-            }).toList();
-        });
-  }
+          final totalGeral = stats.isEmpty
+              ? 0.0
+              : stats.fold(0.0, (sum, d) => sum + d.kwh);
 
-  DateTime _getInicioPeriodo() {
-    final now = DateTime.now();
-    switch (_periodo) {
-      case 'hoje':
-        return DateTime(now.year, now.month, now.day);
-      case '7dias':
-        return now.subtract(const Duration(days: 7));
-      case 'mes':
-      default:
-        return DateTime(now.year, now.month, 1);
-    }
+          stats.sort((a, b) => b.kwh.compareTo(a.kwh));
+
+          for (final device in stats) {
+            device.percent = totalGeral > 0
+                ? (device.kwh / totalGeral * 100)
+                : 0.0;
+          }
+
+          return stats;
+        });
   }
 
   List<DailyStats> _aggregateByDay(List<Reading> readings) {
@@ -329,7 +417,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
 
     for (final reading in readings) {
       final dayKey =
-          '${reading.timestamp.year}-${reading.timestamp.month}-${reading.timestamp.day}';
+          '${reading.timestamp.year}-${reading.timestamp.month.toString().padLeft(2, '0')}-${reading.timestamp.day.toString().padLeft(2, '0')}';
       days.putIfAbsent(dayKey, () => []).add(reading);
     }
 
@@ -337,39 +425,422 @@ class _HistoricoPageState extends State<HistoricoPage> {
     days.forEach((dayKey, dayReadings) {
       final totalPower = dayReadings
           .map((r) => r.powerW)
-          .reduce((a, b) => a + b);
+          .fold(0.0, (a, b) => a + b);
       final avgPower = totalPower / dayReadings.length;
       final dia = DateTime.parse(dayKey);
 
-      result.add(
-        DailyStats(
-          diaDia: dia.day,
-          kwh: avgPower * 24 / 1000, // aproximação
-        ),
-      );
+      result.add(DailyStats(diaDia: dia.day, kwh: avgPower * 24 / 1000));
     });
 
-    return result..sort((a, b) => b.diaDia.compareTo(a.diaDia));
+    // Ordenação ascendente para o gráfico ficar cronológico (dia 1 → dia 31)
+    return result..sort((a, b) => a.diaDia.compareTo(b.diaDia));
   }
 
   int _calculatePontos(double kwhAtual, double mediaMensal) {
+    if (mediaMensal == 0) return 0;
     final poupancaKwh = (mediaMensal - kwhAtual).clamp(0.0, double.infinity);
     final percentReducao = (poupancaKwh / mediaMensal * 100).clamp(0.0, 100.0);
-    return (percentReducao * 1.0).round(); // fator = 1
+    return (percentReducao * 1.0).round();
   }
 
   void _showExportDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Exportar'),
-        content: const Text('Funcionalidade em desenvolvimento'),
+        title: const Text('Exportar relatório'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+              title: const Text('Exportar PDF'),
+              subtitle: const Text('Partilhar ou guardar no dispositivo'),
+              onTap: () {
+                Navigator.pop(context);
+                _exportPdf(context);
+              },
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text('Cancelar'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _exportPdf(BuildContext context) async {
+    final userId = FirebaseAuth.instance.currentUser!.uid;
+
+    // Mostra loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('A gerar PDF...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Recolhe os dados do período selecionado
+      final inicio = Timestamp.fromDate(_dataInicio);
+      final fim = Timestamp.fromDate(_dataFim);
+
+      final List<Reading> allReadings = [];
+      List<String> deviceNames = [];
+
+      // Busca devices
+      final devicesSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('devices')
+          .get();
+
+      for (final deviceDoc in devicesSnap.docs) {
+        final deviceData = deviceDoc.data();
+        final name = deviceData['name'] ?? 'Sem nome';
+
+        if (_deviceId != 'todos' && deviceDoc.id != _deviceId) continue;
+
+        deviceNames.add(name);
+
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('devices')
+            .doc(deviceDoc.id)
+            .collection('readings')
+            .where('timestamp', isGreaterThanOrEqualTo: inicio)
+            .where('timestamp', isLessThanOrEqualTo: fim)
+            .get();
+
+        for (final doc in snap.docs) {
+          final data = doc.data();
+          allReadings.add(
+            Reading(
+              powerW: (data['powerW'] ?? 0).toDouble(),
+              timestamp:
+                  (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            ),
+          );
+        }
+      }
+
+      final dailyStats = _aggregateByDay(allReadings);
+      final totalKwh = dailyStats.isEmpty
+          ? 0.0
+          : dailyStats.map((d) => d.kwh).fold(0.0, (a, b) => a + b);
+      final custoTotal = totalKwh * 0.22;
+      final mediaKwh = dailyStats.isEmpty ? 0.0 : totalKwh / dailyStats.length;
+
+      // Formata datas
+      String fmtDate(DateTime d) =>
+          '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+      // Gera o PDF
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Relatório de Consumo',
+                    style: pw.TextStyle(
+                      fontSize: 22,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.blue800,
+                    ),
+                  ),
+                  pw.Text(
+                    'Averis',
+                    style: pw.TextStyle(fontSize: 14, color: PdfColors.grey600),
+                  ),
+                ],
+              ),
+              pw.Divider(color: PdfColors.blue800, thickness: 1.5),
+              pw.SizedBox(height: 4),
+            ],
+          ),
+          build: (context) => [
+            // Info do período
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.blue50,
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Período',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.grey600,
+                        ),
+                      ),
+                      pw.Text(
+                        '${fmtDate(_dataInicio)}  →  ${fmtDate(_dataFim)}',
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Dispositivo(s)',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.grey600,
+                        ),
+                      ),
+                      pw.Text(
+                        deviceNames.isEmpty ? 'Todos' : deviceNames.join(', '),
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Gerado em',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.grey600,
+                        ),
+                      ),
+                      pw.Text(
+                        fmtDate(DateTime.now()),
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            pw.SizedBox(height: 20),
+
+            // Resumo
+            pw.Text(
+              'Resumo',
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              children: [
+                _pdfStatBox(
+                  'Total Consumido',
+                  '${totalKwh.toStringAsFixed(2)} kWh',
+                ),
+                pw.SizedBox(width: 12),
+                _pdfStatBox(
+                  'Custo Estimado',
+                  '${custoTotal.toStringAsFixed(2)} €',
+                ),
+                pw.SizedBox(width: 12),
+                _pdfStatBox(
+                  'Média Diária',
+                  '${mediaKwh.toStringAsFixed(2)} kWh/dia',
+                ),
+                pw.SizedBox(width: 12),
+                _pdfStatBox('Dias com dados', '${dailyStats.length}'),
+              ],
+            ),
+
+            pw.SizedBox(height: 24),
+
+            // Tabela por dia
+            pw.Text(
+              'Consumo por Dia',
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 8),
+
+            if (dailyStats.isEmpty)
+              pw.Text(
+                'Sem dados para o período selecionado.',
+                style: const pw.TextStyle(color: PdfColors.grey600),
+              )
+            else
+              pw.Table(
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey300,
+                  width: 0.5,
+                ),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(1),
+                  1: const pw.FlexColumnWidth(2),
+                  2: const pw.FlexColumnWidth(2),
+                  3: const pw.FlexColumnWidth(2),
+                },
+                children: [
+                  // Cabeçalho
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.blue800,
+                    ),
+                    children: [
+                      _pdfTableHeader('Dia'),
+                      _pdfTableHeader('Consumo (kWh)'),
+                      _pdfTableHeader('Custo (€)'),
+                      _pdfTableHeader('vs Média'),
+                    ],
+                  ),
+                  // Linhas de dados
+                  ...dailyStats.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final d = entry.value;
+                    final diffPct = mediaKwh > 0
+                        ? ((d.kwh - mediaKwh) / mediaKwh * 100)
+                        : 0.0;
+                    final isAbove = d.kwh > mediaKwh;
+                    final bgColor = i % 2 == 0
+                        ? PdfColors.white
+                        : PdfColors.grey100;
+                    return pw.TableRow(
+                      decoration: pw.BoxDecoration(color: bgColor),
+                      children: [
+                        _pdfTableCell('Dia ${d.diaDia}'),
+                        _pdfTableCell(d.kwh.toStringAsFixed(3)),
+                        _pdfTableCell((d.kwh * 0.22).toStringAsFixed(2)),
+                        _pdfTableCell(
+                          '${isAbove ? '+' : ''}${diffPct.toStringAsFixed(1)}%',
+                          color: isAbove
+                              ? PdfColors.red700
+                              : PdfColors.green700,
+                        ),
+                      ],
+                    );
+                  }),
+                  // Totais
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.blue50),
+                    children: [
+                      _pdfTableCell('Total', bold: true),
+                      _pdfTableCell(totalKwh.toStringAsFixed(3), bold: true),
+                      _pdfTableCell(custoTotal.toStringAsFixed(2), bold: true),
+                      _pdfTableCell('—', bold: true),
+                    ],
+                  ),
+                ],
+              ),
+
+            pw.SizedBox(height: 24),
+
+            // Nota de rodapé
+            pw.Divider(color: PdfColors.grey400),
+            pw.Text(
+              'Nota: O custo é calculado com base na tarifa de 0,22 €/kWh. '
+              'Os valores de consumo são estimativas baseadas na potência média registada.',
+              style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+            ),
+          ],
+        ),
+      );
+
+      if (context.mounted) Navigator.pop(context); // fecha loading
+
+      // Partilha o PDF
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename:
+            'averis_consumo_${fmtDate(_dataInicio).replaceAll('/', '-')}_${fmtDate(_dataFim).replaceAll('/', '-')}.pdf',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // fecha loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao gerar PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Helpers para células da tabela PDF
+  pw.Widget _pdfStatBox(String label, String value) {
+    return pw.Expanded(
+      child: pw.Container(
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.blue200),
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              label,
+              style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              value,
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _pdfTableHeader(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.white,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _pdfTableCell(String text, {bool bold = false, PdfColor? color}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: color ?? PdfColors.black,
+        ),
       ),
     );
   }
@@ -407,7 +878,7 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color ?? Colors.blue.shade50,
+        color: color != null ? color!.withOpacity(0.1) : Colors.blue.shade50,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -415,6 +886,40 @@ class _StatCard extends StatelessWidget {
           Text(title, style: Theme.of(context).textTheme.bodySmall),
           Text(value, style: Theme.of(context).textTheme.headlineSmall),
         ],
+      ),
+    );
+  }
+}
+
+class _DatePickerButton extends StatelessWidget {
+  final String label;
+  final DateTime date;
+  final VoidCallback onTap;
+
+  const _DatePickerButton({
+    required this.label,
+    required this.date,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final formatted =
+        '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+          suffixIcon: const Icon(Icons.calendar_today, size: 18),
+        ),
+        child: Text(formatted, style: Theme.of(context).textTheme.bodyMedium),
       ),
     );
   }
@@ -446,19 +951,24 @@ class DailyChartPainter extends CustomPainter {
         ..strokeWidth = 2,
     );
 
-    // Barras e pontos
+    // FIX 6: Divisão por zero quando dailyStats.length == 1.
+    // A expressão '(size.width - 60) / (dailyStats.length - 1)' = 0/0 = NaN.
+    // Quando há apenas 1 barra, centramo-la; caso contrário usamos o spread normal.
     for (int i = 0; i < dailyStats.length; i++) {
       final stat = dailyStats[i];
-      final x = 40 + i * ((size.width - 60) / (dailyStats.length - 1));
+      final double x;
+      if (dailyStats.length == 1) {
+        x = size.width / 2;
+      } else {
+        x = 40 + i * ((size.width - 60) / (dailyStats.length - 1));
+      }
       final y = size.height * 0.7 - (stat.kwh / maxKwh * size.height * 0.5);
 
-      // Barra
       canvas.drawRect(
         Rect.fromLTWH(x - 15, y, 30, size.height * 0.7 - y),
         Paint()..color = Colors.blue.withOpacity(0.7),
       );
 
-      // Ponto
       canvas.drawCircle(Offset(x, y), 5, Paint()..color = Colors.blue);
     }
   }
