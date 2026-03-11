@@ -43,6 +43,7 @@ dependencies:
   pdf: ^3.10.8
   printing: ^5.13.1
   wifi_iot: ^0.3.19
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:

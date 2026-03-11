@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'auto_detect_page.dart'; // ← A TUA PÁGINA QUE JÁ FUNCIONA
+import 'shelly_provisioning_page.dart';
 
 class AddDevicePage extends StatefulWidget {
   const AddDevicePage({super.key});
@@ -109,6 +110,40 @@ class _AddDevicePageState extends State<AddDevicePage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
+
+                // ✅ NOVO BOTÃO — Provisioning (Shelly de fábrica)
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final result = await Navigator.push<Map<String, dynamic>>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ShellyProvisioningPage(),
+                      ),
+                    );
+                    if (result != null && mounted) {
+                      _nameController.text = result['model'] ?? 'Shelly Plug S';
+                      _ipController.text = result['ip'] ?? '';
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '✅ Shelly encontrado em ${result['ip']}',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.add_link),
+                  label: const Text('Configurar novo Shelly (de fábrica)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
 
                 // ✅ BOTÃO QUE ABRE AutoDetectPage
                 ElevatedButton.icon(

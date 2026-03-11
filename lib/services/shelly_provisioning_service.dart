@@ -1,19 +1,74 @@
-import 'package:wifi_iot/wifi_iot.dart';
-import 'shelly_api_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class ShellyProvisioningService {
-  Future<void> connectToShelly(String ssid) async {
-    await WiFiForIoTPlugin.connect(
-      ssid,
-      security: NetworkSecurity.NONE,
-      joinOnce: true,
-    );
+  static const String _shellyApIp =
+      '192.168.33.1'; // IP padrão do AP do Shelly Gen 3
+
+  /// Passo 1: Obter info do dispositivo (quando ligado ao AP do Shelly)
+  static Future<Map<String, dynamic>> getDeviceInfo() async {
+    final uri = Uri.parse('http://$_shellyApIp/rpc/Shelly.GetDeviceInfo');
+    final res = await http.get(uri).timeout(const Duration(seconds: 5));
+    if (res.statusCode != 200)
+      throw Exception('Não foi possível comunicar com o Shelly');
+    return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<void> provisionDevice(String wifiSSID, String wifiPass) async {
-    final api = ShellyApiService();
+  /// Passo 2: Configurar Wi-Fi da casa no Shelly
+  static Future<void> setWifiConfig({
+    required String ssid,
+    required String password,
+  }) async {
+    final uri = Uri.parse('http://$_shellyApIp/rpc/WiFi.SetConfig');
+    final body = jsonEncode({
+      "config": {
+        "sta": {"ssid": ssid, "pass": password, "enable": true},
+        "ap": {
+          "enable": false, // Desliga o AP depois de configurado
+        },
+      },
+    });
 
-    await api.setWifi(wifiSSID, wifiPass);
-    await api.reboot();
+    final res = await http
+        .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
+        .timeout(const Duration(seconds: 5));
+
+    if (res.statusCode != 200) throw Exception('Falha ao configurar Wi-Fi');
+  }
+
+  /// Passo 3: Reboot do Shelly
+  static Future<void> reboot() async {
+    final uri = Uri.parse('http://$_shellyApIp/rpc/Shelly.Reboot');
+    await http.get(uri).timeout(const Duration(seconds: 3)).catchError((_) {
+      // É normal dar timeout aqui — o Shelly está a reiniciar
+    });
+  }
+
+  /// Passo 4: Descobrir o novo IP do Shelly na rede (após reboot)
+  /// Faz scan de IPs na subnet e testa o /rpc/Shelly.GetDeviceInfo
+  static Future<String?> discoverShellyIp({
+    required String subnet, // ex: "192.168.1"
+    String? expectedMac,
+  }) async {
+    final futures = List.generate(254, (i) async {
+      final ip = '$subnet.${i + 1}';
+      try {
+        final uri = Uri.parse('http://$ip/rpc/Shelly.GetDeviceInfo');
+        final res = await http
+            .get(uri)
+            .timeout(const Duration(milliseconds: 800));
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          // Se temos o MAC esperado, verificamos
+          if (expectedMac == null || data['mac'] == expectedMac) {
+            return ip;
+          }
+        }
+      } catch (_) {}
+      return null;
+    });
+
+    final results = await Future.wait(futures);
+    return results.firstWhere((ip) => ip != null, orElse: () => null);
   }
 }
