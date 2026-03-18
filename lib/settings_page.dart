@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'services/background_service.dart';
+import 'services/notification_service.dart';
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Tipos de contrato de energia em Portugal
 // Fonte: ERSE – tarifas reguladas 2024/2025
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 enum TipoContrato { simples, biHorario, triHorario }
 
 extension TipoContratoLabel on TipoContrato {
@@ -88,6 +90,10 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _logout() async {
     setState(() => _isLoggingOut = true);
     try {
+      // Para os listeners e as tarefas de background antes de fazer logout
+      NotificationService.stopListeners();
+      await BackgroundService.cancelTasks();
+
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -197,6 +203,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           .collection('users')
                           .doc(uid)
                           .update({'settings.notifications': map});
+
+                      // Reinicia os listeners com as novas preferências
+                      NotificationService.startListeners(uid);
                     },
                   ),
                   const SizedBox(height: 24),
