@@ -9,8 +9,9 @@ class ShellyProvisioningService {
   static Future<Map<String, dynamic>> getDeviceInfo() async {
     final uri = Uri.parse('http://$_shellyApIp/rpc/Shelly.GetDeviceInfo');
     final res = await http.get(uri).timeout(const Duration(seconds: 5));
-    if (res.statusCode != 200)
+    if (res.statusCode != 200) {
       throw Exception('Não foi possível comunicar com o Shelly');
+    }
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 

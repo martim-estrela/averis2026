@@ -1,0 +1,140 @@
+{
+    "collections": {
+        "users": {
+            "<uid>": {
+                "name": "string",
+                "email": "string",
+                "photoUrl": "string | null",
+                "createdAt": "Timestamp",
+                "nivel": 1,
+                "pontos": 0,
+                "goals": {
+                    "monthlyKwhTarget": 0.0,
+                    "monthlyCostTarget": 0.0,
+                    "focus": "cost | kwh"
+                },
+                "achievements": {
+                    "firstSaving": false,
+                    "sevenDaysBelowAverage": false,
+                    "topTenPercentMonth": false,
+                    "reachedLevel3": false,
+                    "savedInWeekend": false,
+                    "reachedLevel5": false
+                },
+                "privacy": {
+                    "shareAnonymous": false
+                },
+                "settings": {
+                    "theme": "system | light | dark",
+                    "language": "pt",
+                    "energyPrice": 0.22,
+                    "includeTax": true,
+                    "energyContract": {
+                        "tipo": "simples | biHorario | triHorario",
+                        "precos": {
+                            "simples": 0.2134,
+                            "_note": "ou foraVazio+vazio, ou ponta+cheias+vazio conforme o tipo"
+                        }
+                    },
+                    "notifications": {
+                        "deviceOffline": true,
+                        "highConsumption": true,
+                        "goalReached": true,
+                        "levelUp": true,
+                        "quietHours": {
+                            "enabled": false,
+                            "start": "22:00",
+                            "end": "07:00"
+                        }
+                    },
+                    "automations": {
+                        "turnAllOffAtMidnight": false,
+                        "weekdayMorningOn": {
+                            "enabled": false,
+                            "time": "07:00",
+                            "deviceIds": []
+                        }
+                    }
+                },
+                "_notifState": {
+                    "_note": "Usado pelo WorkManager para evitar notificações repetidas",
+                    "lastGoal": false,
+                    "lastLevel": 1,
+                    "deviceStates": {
+                        "<deviceId>": true
+                    }
+                }
+            }
+        },
+        "devices": {
+            "<deviceId>": {
+                "_note": "Coleção raiz — NÃO dentro do documento do utilizador",
+                "userId": "<uid>",
+                "name": "Tomada Sala",
+                "ip": "192.168.1.10",
+                "mac": "AA:BB:CC:DD:EE:FF",
+                "status": "on | off",
+                "type": "shelly-plug",
+                "online": true,
+                "createdAt": "Timestamp",
+                "lastSeenAt": "Timestamp",
+                "lastMetrics": {
+                    "_note": "Última leitura conhecida — atualizada a cada poll",
+                    "powerW": 120.5,
+                    "totalKwh": 14.32,
+                    "voltageV": 229.8,
+                    "currentMa": 524.0,
+                    "timestamp": "Timestamp"
+                },
+                "subcollections": {
+                    "readings": {
+                        "<readingId>": {
+                            "_note": "Leituras em tempo real — apagar com mais de 7 dias",
+                            "powerW": 120.5,
+                            "voltageV": 229.8,
+                            "currentMa": 524.0,
+                            "frequencyHz": 50.0,
+                            "totalWh": 14320.0,
+                            "totalKwh": 14.32,
+                            "timestamp": "Timestamp"
+                        }
+                    },
+                    "dailyStats": {
+                        "<YYYY-MM-DD>": {
+                            "_note": "Um documento por dia — calculado a partir das readings",
+                            "sumPowerW": 28500.0,
+                            "count": 240,
+                            "avgPowerW": 118.75,
+                            "peakPowerW": 2800.0,
+                            "estimatedKwh": 2.85,
+                            "estimatedCost": 0.63,
+                            "updatedAt": "Timestamp"
+                        }
+                    },
+                    "monthlyStats": {
+                        "<YYYY-MM>": {
+                            "_note": "Um documento por mês — agregado dos dailyStats",
+                            "totalKwh": 62.4,
+                            "totalCost": 13.73,
+                            "avgDailyKwh": 2.08,
+                            "peakDayKwh": 4.2,
+                            "peakDay": "2026-03-15",
+                            "updatedAt": "Timestamp"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "_firestore_rules": {
+        "_note": "Regras de segurança recomendadas",
+        "users/{uid}": "allow read, write if request.auth.uid == uid",
+        "devices/{deviceId}": "allow read, write if request.auth.uid == resource.data.userId"
+    },
+    "_indexes": {
+        "_note": "Índices compostos necessários no Firebase Console",
+        "index_1": "devices — userId ASC + createdAt DESC",
+        "index_2": "devices/{id}/readings — timestamp DESC",
+        "index_3": "devices/{id}/dailyStats — (document ID) ASC"
+    }
+}

@@ -12,6 +12,8 @@ class AutoDetectPage extends StatefulWidget {
 class _AutoDetectPageState extends State<AutoDetectPage> {
   final List<SmartPlugDevice> _foundDevices = [];
   bool _isScanning = false;
+  int _scanned = 0; // progresso para a barra
+  static const int _totalIps = 254;
 
   @override
   Widget build(BuildContext context) {
@@ -39,15 +41,14 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Barra de progresso
+            // ✅ Barra de progresso real durante o scan
             LinearProgressIndicator(
-              value: _isScanning ? null : 0,
+              value: _isScanning ? (_scanned / _totalIps).clamp(0.0, 1.0) : 0,
               backgroundColor: Colors.grey[300],
               valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
             ),
             const SizedBox(height: 24),
 
-            // Título e instruções
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
@@ -63,7 +64,9 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'A app vai escanear a tua rede Wi-Fi à procura de Smart Plugs',
+                    _isScanning
+                        ? 'A verificar $_scanned de $_totalIps endereços...'
+                        : 'A app vai escanear a tua rede Wi-Fi à procura de Smart Plugs',
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: Colors.grey[600],
                     ),
@@ -74,7 +77,6 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
               ),
             ),
 
-            // Botão principal
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ElevatedButton.icon(
@@ -100,14 +102,12 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  elevation: 2,
                 ),
               ),
             ),
 
             const SizedBox(height: 24),
 
-            // Conteúdo principal
             Expanded(
               child: _foundDevices.isEmpty
                   ? Center(
@@ -138,7 +138,8 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 48),
                             child: Text(
-                              'Toca em "Explorar Rede" para procurar Smart Plugs na tua rede Wi-Fi local.',
+                              'Toca em "Explorar Rede" para procurar Smart '
+                              'Plugs na tua rede Wi-Fi local.',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: Colors.grey[500],
                               ),
@@ -218,10 +219,6 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.green.shade600,
                                       foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(20),
                                       ),
@@ -244,11 +241,11 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
   Future<void> _scanNetwork() async {
     setState(() {
       _isScanning = true;
+      _scanned = 0;
       _foundDevices.clear();
     });
 
     try {
-      // 1. Obtém subnet da rede Wi-Fi
       final info = NetworkInfo();
       final wifiIP = await info.getWifiIP();
 
@@ -266,129 +263,89 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
 
       final baseIP = wifiIP.substring(0, wifiIP.lastIndexOf('.'));
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Escaneando $baseIP.1-254...'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-
-      // 2. Scan paralelo de toda a sub-rede
-      final List<SmartPlugDevice> foundDevices = [];
+      // ✅ Timeout global de 30 segundos para o scan completo
+      final foundDevices = <SmartPlugDevice>[];
 
       await Future.wait(
-        List.generate(254, (i) async {
+        List.generate(_totalIps, (i) async {
           final testIP = '$baseIP.${i + 1}';
-          final smartPlug = await _testSmartPlug(testIP);
-          if (smartPlug != null) {
-            foundDevices.add(smartPlug);
-          }
+          final device = await _testSmartPlug(testIP);
+          if (mounted) setState(() => _scanned++);
+          if (device != null) foundDevices.add(device);
         }),
-        eagerError: true,
       );
 
       if (mounted) {
-        setState(() {
-          _foundDevices.addAll(foundDevices);
-        });
+        setState(() => _foundDevices.addAll(foundDevices));
 
         if (foundDevices.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Nenhum Smart Plug encontrado na rede'),
-              backgroundColor: Color.fromARGB(255, 248, 36, 58),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Encontrados ${_foundDevices.length} dispositivo(s)!',
-              ),
-              backgroundColor: Colors.green.shade100,
+              backgroundColor: Colors.red,
             ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro no scan: $e'),
-            backgroundColor: Colors.red.shade100,
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro no scan: $e')));
       }
     } finally {
-      if (mounted) {
-        setState(() => _isScanning = false);
-      }
+      if (mounted) setState(() => _isScanning = false);
     }
   }
 
   Future<SmartPlugDevice?> _testSmartPlug(String ip) async {
-    try {
-      final endpoints = [
-        // Shelly
-        'http://$ip/rpc/Shelly.GetStatus',
-        'http://$ip/status',
-        // TP-Link
-        'http://$ip/api/system/get_sysinfo',
-        // Sonoff
-        'http://$ip/app?typ=login',
-        // Genéricos
-        'http://$ip/',
-        'http://$ip/meta',
-      ];
+    // ✅ Timeout curto por IP — o timeout global é 30s
+    const timeout = Duration(milliseconds: 800);
 
-      for (final endpoint in endpoints) {
-        try {
-          final response = await http
-              .get(Uri.parse(endpoint))
-              .timeout(const Duration(seconds: 1));
+    final endpoints = [
+      ('http://$ip/rpc/Shelly.GetDeviceInfo', 'shelly'),
+      ('http://$ip/rpc/Shelly.GetStatus', 'shelly'),
+      ('http://$ip/status', 'shelly'),
+      ('http://$ip/api/system/get_sysinfo', 'tplink'),
+    ];
 
-          if (response.statusCode == 200) {
-            final body = response.body.toLowerCase();
+    for (final (endpoint, _) in endpoints) {
+      try {
+        final res = await http.get(Uri.parse(endpoint)).timeout(timeout);
 
-            // Identifica marcas
-            if (body.contains('shelly') || body.contains('restart_required')) {
-              return SmartPlugDevice(
-                ip: ip,
-                name: 'Shelly Plug S',
-                type: 'shelly-plug',
-              );
-            }
-            if (body.contains('tp-link') || body.contains('kasa')) {
-              return SmartPlugDevice(
-                ip: ip,
-                name: 'TP-Link Kasa',
-                type: 'tplink',
-              );
-            }
-            if (body.contains('sonoff') || body.contains('itead')) {
-              return SmartPlugDevice(
-                ip: ip,
-                name: 'Sonoff Basic',
-                type: 'sonoff',
-              );
-            }
+        if (res.statusCode == 200) {
+          final body = res.body.toLowerCase();
+
+          if (body.contains('shelly') ||
+              body.contains('restart_required') ||
+              body.contains('switch:0')) {
+            return SmartPlugDevice(
+              ip: ip,
+              name: 'Shelly Plug S',
+              type: 'shelly-plug',
+            );
           }
-        } catch (e) {
-          // Endpoint falhou, continua
+          if (body.contains('tp-link') || body.contains('kasa')) {
+            return SmartPlugDevice(
+              ip: ip,
+              name: 'TP-Link Kasa',
+              type: 'tplink',
+            );
+          }
+          if (body.contains('sonoff') || body.contains('itead')) {
+            return SmartPlugDevice(ip: ip, name: 'Sonoff', type: 'sonoff');
+          }
         }
+      } catch (_) {
+        // IP não responde neste endpoint — tenta o próximo
       }
-    } catch (e) {
-      // IP não responde
     }
     return null;
   }
 
-  // ✅ CRÍTICO: Devolve o device ao invés de adicionar ao Firestore
   void _selectDevice(SmartPlugDevice device) {
     if (Navigator.canPop(context)) {
-      Navigator.pop(context, device); // ← VOLTA COM O DEVICE PARA AddDevicePage
+      Navigator.pop(context, device);
     }
   }
 }
@@ -398,5 +355,9 @@ class SmartPlugDevice {
   final String name;
   final String type;
 
-  SmartPlugDevice({required this.ip, required this.name, required this.type});
+  const SmartPlugDevice({
+    required this.ip,
+    required this.name,
+    required this.type,
+  });
 }

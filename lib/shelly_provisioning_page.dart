@@ -59,9 +59,7 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
 
     final networks = await WiFiForIoTPlugin.loadWifiList();
     final shellyNets =
-        networks
-            ?.where((n) => n.ssid?.startsWith('Shelly') ?? false)
-            .toList() ??
+        networks.where((n) => n.ssid?.startsWith('Shelly') ?? false).toList() ??
         [];
 
     setState(() {
@@ -152,8 +150,9 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
         expectedMac: _deviceMac,
       );
 
-      if (ip == null)
+      if (ip == null) {
         throw Exception('Shelly não encontrado na rede após reboot');
+      }
 
       setState(() {
         _discoveredIp = ip;

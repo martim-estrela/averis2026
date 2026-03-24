@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,8 +44,9 @@ class NotificationService {
 
   /// Deve ser chamado uma vez em main.dart, após Firebase.initializeApp().
   static Future<void> init() async {
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -54,22 +54,21 @@ class NotificationService {
     );
 
     await _plugin.initialize(
-      const InitializationSettings(
-        android: androidSettings,
-        iOS: iosSettings,
-      ),
+      const InitializationSettings(android: androidSettings, iOS: iosSettings),
     );
 
     // Pede permissão no Android 13+ (API 33+)
     await _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.requestNotificationsPermission();
 
     // Cria o canal de notificações no Android
     await _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(
           const AndroidNotificationChannel(
             _channelId,
@@ -111,38 +110,38 @@ class NotificationService {
         .where('userId', isEqualTo: uid)
         .snapshots()
         .listen((snap) async {
-      // Lê as definições atuais do utilizador
-      final settings = await _getNotifSettings(uid);
-      if (settings['deviceOffline'] != true) return;
-      if (_isQuietHours(settings)) return;
+          // Lê as definições atuais do utilizador
+          final settings = await _getNotifSettings(uid);
+          if (settings['deviceOffline'] != true) return;
+          if (_isQuietHours(settings)) return;
 
-      for (final change in snap.docChanges) {
-        final deviceId = change.doc.id;
-        final data = change.doc.data();
-        if (data == null) continue;
+          for (final change in snap.docChanges) {
+            final deviceId = change.doc.id;
+            final data = change.doc.data();
+            if (data == null) continue;
 
-        final isOnline = data['online'] == true;
-        final deviceName = (data['name'] as String?) ?? 'Dispositivo';
+            final isOnline = data['online'] == true;
+            final deviceName = (data['name'] as String?) ?? 'Dispositivo';
 
-        // Inicializa o estado na primeira leitura (sem notificar)
-        if (!_deviceOnlineState.containsKey(deviceId)) {
-          _deviceOnlineState[deviceId] = isOnline;
-          continue;
-        }
+            // Inicializa o estado na primeira leitura (sem notificar)
+            if (!_deviceOnlineState.containsKey(deviceId)) {
+              _deviceOnlineState[deviceId] = isOnline;
+              continue;
+            }
 
-        final wasOnline = _deviceOnlineState[deviceId]!;
+            final wasOnline = _deviceOnlineState[deviceId]!;
 
-        // Só notifica na transição online → offline
-        if (wasOnline && !isOnline) {
-          await showLocalNotification(
-            title: '⚠️ Dispositivo offline',
-            body: '$deviceName ficou sem ligação.',
-          );
-        }
+            // Só notifica na transição online → offline
+            if (wasOnline && !isOnline) {
+              await showLocalNotification(
+                title: '⚠️ Dispositivo offline',
+                body: '$deviceName ficou sem ligação.',
+              );
+            }
 
-        _deviceOnlineState[deviceId] = isOnline;
-      }
-    });
+            _deviceOnlineState[deviceId] = isOnline;
+          }
+        });
   }
 
   // ── Listener: consumo, meta e nível XP ───────────────────────────────────
@@ -153,19 +152,19 @@ class NotificationService {
         .doc(uid)
         .snapshots()
         .listen((snap) async {
-      if (!snap.exists) return;
-      final data = (snap.data() as Map?)?.cast<String, dynamic>() ?? {};
-      final notifSettings =
-          (data['settings']?['notifications'] as Map?)
-              ?.cast<String, dynamic>() ??
-          {};
+          if (!snap.exists) return;
+          final data = (snap.data() as Map?)?.cast<String, dynamic>() ?? {};
+          final notifSettings =
+              (data['settings']?['notifications'] as Map?)
+                  ?.cast<String, dynamic>() ??
+              {};
 
-      if (_isQuietHours(notifSettings)) return;
+          if (_isQuietHours(notifSettings)) return;
 
-      await _checkHighConsumption(data, notifSettings);
-      await _checkGoalReached(data, notifSettings);
-      await _checkLevelUp(data, notifSettings);
-    });
+          await _checkHighConsumption(data, notifSettings);
+          await _checkGoalReached(data, notifSettings);
+          await _checkLevelUp(data, notifSettings);
+        });
   }
 
   // ── Verificação: consumo elevado ──────────────────────────────────────────
@@ -199,8 +198,11 @@ class NotificationService {
   ) async {
     if (settings['goalReached'] != true) return;
 
-    // Ajusta o campo ao nome real que usas no Firestore
-    final goalReached = data['meta']?['atingida'] == true;
+    // ✅ Campo correto: 'goals.monthlyKwhTarget' e consumo do mês
+    final goalKwh =
+        (data['goals']?['monthlyKwhTarget'] as num?)?.toDouble() ?? 0.0;
+    final consumoMes = (data['consumoMes'] as num?)?.toDouble() ?? 0.0;
+    final goalReached = goalKwh > 0 && consumoMes <= goalKwh;
 
     // Só notifica na transição false → true
     if (goalReached && _lastGoalState == false) {
@@ -221,8 +223,8 @@ class NotificationService {
   ) async {
     if (settings['levelUp'] != true) return;
 
-    // Ajusta o campo ao nome real que usas no Firestore
-    final level = (data['xp']?['nivel'] as num?)?.toInt() ?? 1;
+    // ✅ Campo correto: 'nivel' na raiz do documento
+    final level = (data['nivel'] as num?)?.toInt() ?? 1;
 
     if (_lastKnownLevel != null && level > _lastKnownLevel!) {
       await showLocalNotification(
@@ -264,8 +266,7 @@ class NotificationService {
     final startParts = startStr.split(':');
     final endParts = endStr.split(':');
 
-    final start =
-        int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+    final start = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
     final end = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
 
     // Trata períodos que passam a meia-noite (ex: 22:00 → 07:00)

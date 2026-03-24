@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'auto_detect_page.dart'; // ← A TUA PÁGINA QUE JÁ FUNCIONA
+import 'auto_detect_page.dart';
 import 'shelly_provisioning_page.dart';
+import 'services/user_service.dart';
 
 class AddDevicePage extends StatefulWidget {
   const AddDevicePage({super.key});
@@ -15,6 +15,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _ipController = TextEditingController();
+  String _deviceType = 'shelly-plug';
   bool _isLoading = false;
 
   Future<void> _addDevice() async {
@@ -25,18 +26,14 @@ class _AddDevicePageState extends State<AddDevicePage> {
     try {
       final userId = FirebaseAuth.instance.currentUser!.uid;
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('devices')
-          .doc('device_${DateTime.now().millisecondsSinceEpoch}')
-          .set({
-            'name': _nameController.text.trim(),
-            'ip': _ipController.text.trim(),
-            'status': 'off',
-            'type': 'shelly-plug', // ← Compatível com SmartPlugService
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+      // ✅ Usa UserService — cria em devices/{deviceId} (coleção raiz)
+      //    com a estrutura completa (lastMetrics, online, etc.)
+      await UserService.addDevice(
+        uid: userId,
+        name: _nameController.text.trim(),
+        ip: _ipController.text.trim(),
+        type: _deviceType,
+      );
 
       if (!mounted) return;
 
@@ -48,14 +45,11 @@ class _AddDevicePageState extends State<AddDevicePage> {
       );
 
       Navigator.of(context).pop();
-    } on FirebaseException catch (e) {
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Erro: ${e.message}')));
-    } catch (_) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Erro inesperado.')));
+      ).showSnackBar(SnackBar(content: Text('Erro: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -111,7 +105,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
                 ),
                 const SizedBox(height: 32),
 
-                // ✅ NOVO BOTÃO — Provisioning (Shelly de fábrica)
+                // Botão provisioning (Shelly de fábrica)
                 ElevatedButton.icon(
                   onPressed: () async {
                     final result = await Navigator.push<Map<String, dynamic>>(
@@ -123,6 +117,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
                     if (result != null && mounted) {
                       _nameController.text = result['model'] ?? 'Shelly Plug S';
                       _ipController.text = result['ip'] ?? '';
+                      setState(() => _deviceType = 'shelly-plug');
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
@@ -145,18 +140,17 @@ class _AddDevicePageState extends State<AddDevicePage> {
                 ),
                 const SizedBox(height: 12),
 
-                // ✅ BOTÃO QUE ABRE AutoDetectPage
+                // Botão auto-deteção
                 ElevatedButton.icon(
                   onPressed: () async {
                     final device = await Navigator.push<SmartPlugDevice>(
                       context,
                       MaterialPageRoute(builder: (_) => const AutoDetectPage()),
                     );
-
-                    // ← QUANDO VOLTA, PREENCHE OS CAMPOS AUTOMATICAMENTE
                     if (device != null && mounted) {
                       _nameController.text = device.name;
                       _ipController.text = device.ip;
+                      setState(() => _deviceType = device.type);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('✅ ${device.name} selecionada'),
@@ -178,7 +172,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
                 ),
                 const SizedBox(height: 24),
 
-                // Nome do dispositivo (PREENCHIDO AUTOMATICAMENTE)
+                // Nome
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
@@ -186,33 +180,29 @@ class _AddDevicePageState extends State<AddDevicePage> {
                     hintText: 'Ex: Tomada Cozinha',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Nome obrigatório.';
-                    }
-                    return null;
-                  },
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Nome obrigatório.'
+                      : null,
                 ),
                 const SizedBox(height: 16),
 
-                // IP do Shelly (PREENCHIDO AUTOMATICAMENTE)
+                // IP
                 TextFormField(
                   controller: _ipController,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Endereço IP *',
-                    hintText: '192.168.2.162 (auto-preenchido)',
-                    prefixIcon: const Icon(Icons.router),
-                    border: const OutlineInputBorder(),
+                    hintText: '192.168.1.10',
+                    prefixIcon: Icon(Icons.router),
+                    border: OutlineInputBorder(),
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'IP obrigatório.';
-                    }
-                    final ipRegex = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$');
-                    if (!ipRegex.hasMatch(value.trim())) {
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'IP obrigatório.';
+                    if (!RegExp(
+                      r'^(\d{1,3}\.){3}\d{1,3}$',
+                    ).hasMatch(v.trim())) {
                       return 'IP inválido.';
                     }
                     return null;
@@ -244,7 +234,6 @@ class _AddDevicePageState extends State<AddDevicePage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Dica
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -258,8 +247,8 @@ class _AddDevicePageState extends State<AddDevicePage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Clica "Procurar Shelly na rede" para detetar automaticamente. '
-                          'Depois só confirma e adiciona!',
+                          'Clica "Procurar Shelly na rede" para detetar '
+                          'automaticamente. Depois só confirma e adiciona!',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.blue.shade800,
                           ),

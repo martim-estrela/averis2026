@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'settings_page.dart';
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Sistema de Níveis XP
-// ─────────────────────────────────────────────
+// Thresholds alinhados com GamificationService.pontosParaProximoNivel()
+// ─────────────────────────────────────────────────────────────────────────────
+
 class XpLevel {
   final int nivel;
   final String nome;
@@ -84,23 +85,26 @@ const List<XpLevel> kNiveis = [
   ),
 ];
 
-XpLevel xpLevelForPontos(int pontos) {
+// ✅ Usa pontosTotal (acumulado histórico) para determinar o nível
+XpLevel xpLevelForPontos(int pontosTotal) {
   for (int i = kNiveis.length - 1; i >= 0; i--) {
-    if (pontos >= kNiveis[i].xpMinimo) return kNiveis[i];
+    if (pontosTotal >= kNiveis[i].xpMinimo) return kNiveis[i];
   }
   return kNiveis.first;
 }
 
-double xpProgress(int pontos, XpLevel nivel) {
+// Progresso dentro do nível atual (0.0 → 1.0)
+double xpProgress(int pontosTotal, XpLevel nivel) {
   if (nivel.xpMaximo == -1) return 1.0;
   final range = nivel.xpMaximo - nivel.xpMinimo + 1;
-  final dentro = pontos - nivel.xpMinimo;
+  final dentro = pontosTotal - nivel.xpMinimo;
   return (dentro / range).clamp(0.0, 1.0);
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Conquistas
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _Conquista {
   final String key;
   final String label;
@@ -149,7 +153,7 @@ const List<_Conquista> kConquistas = [
   _Conquista(
     key: 'savedInWeekend',
     label: 'Fim de Semana Verde',
-    descricao: 'Poupaste energia nos dois dias do fim de semana.',
+    descricao: 'Poupaste energia num fim de semana.',
     icon: Icons.weekend,
     cor: Color(0xFF26A69A),
   ),
@@ -173,7 +177,8 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final user = FirebaseAuth.instance.currentUser;
-    final uid = user!.uid;
+    if (user == null) return const SizedBox.shrink();
+    final uid = user.uid;
 
     return Scaffold(
       body: SafeArea(
@@ -192,22 +197,30 @@ class ProfilePage extends StatelessWidget {
               );
             }
 
-            final raw = snapshot.data!.data() as Map;
-            final data = Map<String, dynamic>.from(raw);
+            final data = Map<String, dynamic>.from(
+              snapshot.data!.data() as Map,
+            );
 
-            final name = data['name'] ?? user.displayName ?? 'Utilizador';
-            final email = data['email'] ?? user.email ?? 'sem email';
+            final name =
+                (data['name'] as String?) ?? user.displayName ?? 'Utilizador';
+            final email =
+                (data['email'] as String?) ?? user.email ?? 'sem email';
             final photoUrl = data['photoUrl'] as String?;
 
-            final pontos = (data['pontos'] ?? 0) as int;
-            final nivel = xpLevelForPontos(pontos);
-            final progress = xpProgress(pontos, nivel);
+            // ✅ pontosTotal para determinar o nível
+            // ✅ pontos para mostrar o progresso dentro do nível atual
+            final pontosTotal = (data['pontosTotal'] as num?)?.toInt() ?? 0;
+            final pontosNivel = (data['pontos'] as num?)?.toInt() ?? 0;
+            final nivelNum = (data['nivel'] as num?)?.toInt() ?? 1;
+
+            final nivel = xpLevelForPontos(pontosTotal);
+            final progress = xpProgress(pontosTotal, nivel);
             final proximoNivel = nivel.nivel < kNiveis.length
-                ? kNiveis[nivel.nivel] // índice = nivel - 1, próximo = nivel
+                ? kNiveis[nivel.nivel]
                 : null;
 
             final achievements = Map<String, dynamic>.from(
-              data['achievements'] ?? {},
+              (data['achievements'] as Map?) ?? {},
             );
 
             return SingleChildScrollView(
@@ -215,7 +228,7 @@ class ProfilePage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Cabeçalho ───────────────────────────────────────
+                  // Cabeçalho
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -237,7 +250,6 @@ class ProfilePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  // ── Avatar + nome + email + editar ───────────────────
                   _ProfileHeader(
                     uid: uid,
                     name: name,
@@ -246,20 +258,19 @@ class ProfilePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  // ── Card XP / Nível ──────────────────────────────────
                   _XpCard(
-                    pontos: pontos,
+                    pontosTotal: pontosTotal,
+                    pontosNivel: pontosNivel,
+                    nivelNum: nivelNum,
                     nivel: nivel,
                     progress: progress,
                     proximoNivel: proximoNivel,
                   ),
                   const SizedBox(height: 24),
 
-                  // ── Conquistas ───────────────────────────────────────
                   _ConquistasCard(achievements: achievements),
                   const SizedBox(height: 24),
 
-                  // ── Níveis disponíveis ───────────────────────────────
                   _NiveisCard(nivelAtual: nivel),
                   const SizedBox(height: 32),
                 ],
@@ -273,7 +284,7 @@ class ProfilePage extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PROFILE HEADER — avatar, nome editável, email
+// PROFILE HEADER
 // ═══════════════════════════════════════════════════════════════
 
 class _ProfileHeader extends StatefulWidget {
@@ -332,7 +343,6 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
 
     return Column(
       children: [
-        // Avatar
         Stack(
           alignment: Alignment.bottomRight,
           children: [
@@ -345,7 +355,6 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
                   ? const Icon(Icons.person, size: 44)
                   : null,
             ),
-            // Botão editar foto (futuro)
             CircleAvatar(
               radius: 14,
               backgroundColor: Colors.blue.shade600,
@@ -359,7 +368,6 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
         ),
         const SizedBox(height: 12),
 
-        // Nome — visualização ou edição
         if (_editing)
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -436,13 +444,17 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
 // ═══════════════════════════════════════════════════════════════
 
 class _XpCard extends StatelessWidget {
-  final int pontos;
+  final int pontosTotal;
+  final int pontosNivel;
+  final int nivelNum;
   final XpLevel nivel;
   final double progress;
   final XpLevel? proximoNivel;
 
   const _XpCard({
-    required this.pontos,
+    required this.pontosTotal,
+    required this.pontosNivel,
+    required this.nivelNum,
     required this.nivel,
     required this.progress,
     this.proximoNivel,
@@ -474,7 +486,6 @@ class _XpCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Título do nível
           Row(
             children: [
               Text(nivel.emoji, style: const TextStyle(fontSize: 32)),
@@ -482,26 +493,22 @@ class _XpCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: nivel.cor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Nível ${nivel.nivel}',
-                          style: txt.bodySmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: nivel.cor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Nível $nivelNum',
+                      style: txt.bodySmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
                       ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -535,18 +542,17 @@ class _XpCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('$pontos XP', style: txt.bodySmall),
+              Text('$pontosTotal XP total', style: txt.bodySmall),
               if (isMaxLevel)
                 Text('Nível máximo! 🎉', style: txt.bodySmall)
               else
                 Text(
-                  'Próximo nível: ${proximoNivel!.xpMinimo} XP',
+                  'Próximo: ${proximoNivel!.xpMinimo} XP',
                   style: txt.bodySmall,
                 ),
             ],
           ),
 
-          // Como ganhar XP
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 8),
@@ -555,10 +561,11 @@ class _XpCard extends StatelessWidget {
             style: txt.bodySmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
-          _xpDica(context, '⚡', 'Dia abaixo da média de consumo', '+5 XP'),
-          _xpDica(context, '📅', 'Meta semanal atingida', '+20 XP'),
-          _xpDica(context, '🏅', 'Meta mensal atingida', '+50 XP'),
-          _xpDica(context, '🌍', '1 kWh poupado vs. média', '+2 XP'),
+          // ✅ Dicas alinhadas com GamificationService._calcularPontos()
+          _xpDica(context, '⚡', 'Poupança 5–10% vs média diária', '+5 XP'),
+          _xpDica(context, '💪', 'Poupança 10–20% vs média diária', '+15 XP'),
+          _xpDica(context, '🌿', 'Poupança 20–30% vs média diária', '+25 XP'),
+          _xpDica(context, '🏅', 'Poupança > 30% vs média diária', '+50 XP'),
         ],
       ),
     );
@@ -676,7 +683,7 @@ class _ConquistasCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// NÍVEIS CARD — tabela de todos os níveis
+// NÍVEIS CARD
 // ═══════════════════════════════════════════════════════════════
 
 class _NiveisCard extends StatelessWidget {
@@ -725,10 +732,7 @@ class _NiveisCard extends StatelessWidget {
                   children: [
                     Text(
                       bloqueado ? '🔒' : n.emoji,
-                      style: TextStyle(
-                        fontSize: 22,
-                        color: bloqueado ? null : null,
-                      ),
+                      style: const TextStyle(fontSize: 22),
                     ),
                     const SizedBox(width: 12),
                     Expanded(

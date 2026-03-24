@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'profile_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'profile_page.dart';
 import 'devices_page.dart';
-import 'readings_chart_painter.dart';
 import 'historic_page.dart';
-import 'services/readings_service.dart';
 import 'services/shelly_api.dart';
+import 'services/shelly_polling_service.dart';
+import 'services/user_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -33,9 +33,7 @@ class _HomePageState extends State<HomePage> {
       body: SafeArea(child: pages[_selectedIndex]),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() => _selectedIndex = index);
-        },
+        onTap: (index) => setState(() => _selectedIndex = index),
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
@@ -64,8 +62,13 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _DashboardView extends StatefulWidget {
   const _DashboardView();
+
   @override
   State<_DashboardView> createState() => _DashboardViewState();
 }
@@ -73,13 +76,9 @@ class _DashboardView extends StatefulWidget {
 class _DashboardViewState extends State<_DashboardView> {
   String? _selectedDeviceId;
 
-  // FIX 1: Flag para garantir que o timer só arranca UMA vez,
-  // mesmo que o StreamBuilder rebuilde várias vezes.
-  bool _autoStarted = false;
-
   @override
   void dispose() {
-    ReadingsService.stop();
+    ShellyPollingService.stop();
     super.dispose();
   }
 
@@ -91,10 +90,10 @@ class _DashboardViewState extends State<_DashboardView> {
     }
 
     return StreamBuilder<QuerySnapshot>(
+      // ✅ Coleção raiz 'devices' filtrada por userId
       stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
           .collection('devices')
+          .where('userId', isEqualTo: userId)
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
@@ -103,55 +102,42 @@ class _DashboardViewState extends State<_DashboardView> {
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('Sem dispositivos'));
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.electrical_services_outlined,
+                  size: 64,
+                  color: Colors.grey,
+                ),
+                SizedBox(height: 16),
+                Text('Sem dispositivos'),
+                SizedBox(height: 8),
+                Text(
+                  'Adiciona um Smart Plug no separador Dispositivos',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
+          );
         }
 
         final devices = snapshot.data!.docs;
-
-        // FIX 1 (cont.): O addPostFrameCallback estava a ser chamado a cada
-        // rebuild do StreamBuilder (cada vez que o Firestore emitia dados),
-        // reiniciando o timer repetidamente. Com a flag _autoStarted,
-        // o timer só é iniciado uma única vez.
-        if (!_autoStarted) {
-          _autoStarted = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            final List<Map<String, String>> allDevices = [];
-            for (final doc in devices) {
-              final data = doc.data() as Map<String, dynamic>;
-              final ip = data['ip'] as String?;
-              if (ip != null) {
-                allDevices.add({'id': doc.id, 'ip': ip});
-              }
-            }
-            if (allDevices.isNotEmpty) {
-              print('🚀 Iniciando timer para ${allDevices.length} devices');
-              ReadingsService.startAutoCapture(
-                userId: userId,
-                devices: allDevices,
-              );
-            }
-          });
-        }
-
-        // FIX 2: Removido o operador '!' de _selectedDeviceId.
-        // _selectedDeviceId é nullable; usar '!' causava uma exceção
-        // se fosse null (ex: na primeira carga). O orElse já garante
-        // o fallback para devices.first.
         final docList = devices
             .cast<QueryDocumentSnapshot<Map<String, dynamic>>>();
+
+        // Seleciona o dispositivo atual ou o primeiro da lista
         final selectedDevice = docList.firstWhere(
           (d) => d.id == _selectedDeviceId,
           orElse: () => docList.first,
         );
         final deviceData = selectedDevice.data();
-        final ip = deviceData['ip'] as String?;
+        final ip = (deviceData['ip'] as String?) ?? '';
 
         return Column(
           children: [
-            // FIX 3: Corrigido 'initialValue' → 'value'.
-            // DropdownButtonFormField não tem o parâmetro 'initialValue';
-            // o correto é 'value'. Com 'initialValue', o widget não
-            // mostrava o item selecionado, causando desconfigurações visuais.
             Padding(
               padding: const EdgeInsets.all(16),
               child: DropdownButtonFormField<String>(
@@ -159,38 +145,44 @@ class _DashboardViewState extends State<_DashboardView> {
                   labelText: 'Dispositivo',
                   border: OutlineInputBorder(),
                 ),
-                initialValue: _selectedDeviceId,
+                // ✅ 'value' em vez de 'initialValue' (que não existe)
+                initialValue: _selectedDeviceId ?? docList.first.id,
                 items: devices.map((doc) {
                   final data = doc.data() as Map<String, dynamic>;
+                  final isOnline = data['online'] == true;
                   return DropdownMenuItem<String>(
                     value: doc.id,
-                    child: Text(data['name'] ?? 'Sem nome'),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: isOnline ? Colors.green : Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        Text((data['name'] as String?) ?? 'Sem nome'),
+                      ],
+                    ),
                   );
                 }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedDeviceId = value;
-                  });
-                },
+                onChanged: (value) => setState(() => _selectedDeviceId = value),
               ),
             ),
 
-            // Live Metrics
+            // Métricas em tempo real
             Expanded(
               child: _LiveMetricsCard(
                 deviceId: selectedDevice.id,
-                shellyIp: ip ?? '',
+                shellyIp: ip,
                 userId: userId,
               ),
             ),
 
             // Gráfico histórico
-            Expanded(
-              child: _ReadingsChart(
-                deviceId: selectedDevice.id,
-                userId: userId,
-              ),
-            ),
+            Expanded(child: _ReadingsChart(deviceId: selectedDevice.id)),
           ],
         );
       },
@@ -198,9 +190,15 @@ class _DashboardViewState extends State<_DashboardView> {
   }
 }
 
-// Card com métricas LIVE da Shelly
+// ─────────────────────────────────────────────────────────────────────────────
+// Card com métricas LIVE
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _LiveMetricsCard extends StatefulWidget {
-  final String deviceId, userId, shellyIp;
+  final String deviceId;
+  final String userId;
+  final String shellyIp;
+
   const _LiveMetricsCard({
     required this.deviceId,
     required this.userId,
@@ -212,61 +210,68 @@ class _LiveMetricsCard extends StatefulWidget {
 }
 
 class _LiveMetricsCardState extends State<_LiveMetricsCard> {
-  ShellyMetrics metrics = ShellyMetrics.empty();
-  Timer? timer;
-
-  // FIX 4: Removido 'static' de lastFirestoreWrite.
-  // Com 'static', o timestamp era partilhado entre TODAS as instâncias
-  // de _LiveMetricsCardState. Ao trocar de dispositivo (nova instância),
-  // o timer de escrita ficava bloqueado porque o campo estático mantinha
-  // o valor da instância anterior. Agora é uma variável de instância.
+  ShellyMetrics _metrics = ShellyMetrics.empty();
+  Timer? _timer;
   int _lastFirestoreWrite = 0;
+  double _energyPrice = 0.22; // valor por omissão até ler do Firestore
 
   @override
   void initState() {
     super.initState();
+    _loadEnergyPrice();
     _fetchLive();
-    timer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchLive());
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchLive());
+  }
+
+  // ✅ Lê o preço de energia das definições do utilizador
+  Future<void> _loadEnergyPrice() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.userId)
+        .get();
+    final data = snap.data();
+    final price =
+        (data?['settings']?['energyPrice'] as num?)?.toDouble() ?? 0.22;
+    if (mounted) setState(() => _energyPrice = price);
   }
 
   Future<void> _fetchLive() async {
     if (widget.shellyIp.isEmpty) return;
     try {
       final newMetrics = await ShellyApi.getMetrics(widget.shellyIp);
-      if (mounted) {
-        setState(() => metrics = newMetrics);
+      if (!mounted) return;
+      setState(() => _metrics = newMetrics);
 
-        // Grava Firestore só a cada 10s
-        final now = DateTime.now().millisecondsSinceEpoch;
-        if (now - _lastFirestoreWrite > 10000) {
-          _lastFirestoreWrite = now;
-          await ReadingsService.capture(
-            userId: widget.userId,
-            deviceId: widget.deviceId,
-            shellyIp: widget.shellyIp,
-          );
-        }
+      // ✅ Grava no Firestore a cada 30s usando UserService (caminho correto)
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - _lastFirestoreWrite > 30000) {
+        _lastFirestoreWrite = now;
+        await UserService.saveReading(
+          uid: widget.userId,
+          deviceId: widget.deviceId,
+          powerW: newMetrics.powerW,
+          voltageV: newMetrics.voltageV,
+          currentMa: newMetrics.currentMa,
+          frequencyHz: newMetrics.frequencyHz,
+          totalWh: newMetrics.totalWh,
+        );
       }
-    } catch (e) {
-      print('Shelly error: $e');
+    } catch (_) {
+      // Shelly sem resposta — não faz nada, o ShellyPollingService
+      // trata de marcar o dispositivo como offline
     }
   }
 
   @override
   void dispose() {
-    timer?.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // FIX 5: Removida a divisão dupla por 1000.
-    // metrics.totalKwh já está em kWh (convertido em ShellyMetrics:
-    // totalKwh = totalWh / 1000). Dividir novamente por 1000 dava
-    // mWh, mostrando sempre 0.00 kWh no dashboard.
-    final todayKwh = metrics.totalKwh.clamp(0.0, double.infinity);
-    final monthKwh = todayKwh * 30; // estimativa
-    final cost = todayKwh * 0.22;
+    final todayKwh = _metrics.totalKwh.clamp(0.0, double.infinity);
+    final cost = todayKwh * _energyPrice; // ✅ usa preço do utilizador
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -280,13 +285,12 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
           ),
           const SizedBox(height: 16),
 
-          // Cards principais
           Row(
             children: [
               Expanded(
                 child: _StatCard(
                   title: 'Atual',
-                  value: '${metrics.powerW.toStringAsFixed(0)} W',
+                  value: '${_metrics.powerW.toStringAsFixed(0)} W',
                   icon: Icons.bolt,
                   iconColor: Colors.amber,
                 ),
@@ -309,7 +313,7 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
               Expanded(
                 child: _StatCard(
                   title: 'Volts',
-                  value: '${metrics.voltageV.toStringAsFixed(0)} V',
+                  value: '${_metrics.voltageV.toStringAsFixed(0)} V',
                   icon: Icons.flashlight_on,
                   iconColor: Colors.deepPurple,
                 ),
@@ -317,25 +321,29 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
               const SizedBox(width: 12),
               Expanded(
                 child: _StatCard(
-                  title: 'mA',
-                  value: '${metrics.currentMa.toStringAsFixed(0)} mA',
+                  title: 'Corrente',
+                  value: '${_metrics.currentMa.toStringAsFixed(0)} mA',
                   icon: Icons.trending_up,
                   iconColor: Colors.green,
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
           _DetailRow(
             'Frequência',
-            '${metrics.frequencyHz.toStringAsFixed(1)} Hz',
+            '${_metrics.frequencyHz.toStringAsFixed(1)} Hz',
             Icons.speed,
           ),
           _DetailRow(
-            'Total',
-            '${metrics.totalKwh.toStringAsFixed(2)} kWh',
+            'Total acumulado',
+            '${_metrics.totalKwh.toStringAsFixed(2)} kWh',
             Icons.electrical_services,
+          ),
+          _DetailRow(
+            'Estado',
+            _metrics.isOn ? 'Ligado' : 'Desligado',
+            Icons.power,
           ),
         ],
       ),
@@ -343,17 +351,20 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
   }
 }
 
-// Gráfico histórico (usa dados do Firestore)
+// ─────────────────────────────────────────────────────────────────────────────
+// Gráfico histórico
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _ReadingsChart extends StatelessWidget {
-  final String deviceId, userId;
-  const _ReadingsChart({required this.deviceId, required this.userId});
+  final String deviceId;
+
+  const _ReadingsChart({required this.deviceId});
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
+      // ✅ Caminho correto: devices/{deviceId}/readings
       stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
           .collection('devices')
           .doc(deviceId)
           .collection('readings')
@@ -364,6 +375,7 @@ class _ReadingsChart extends StatelessWidget {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Container(
             height: 200,
+            margin: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.grey[100],
               borderRadius: BorderRadius.circular(12),
@@ -375,26 +387,17 @@ class _ReadingsChart extends StatelessWidget {
         final readings = snapshot.data!.docs
             .map(
               (doc) =>
-                  (doc.data() as Map<String, dynamic>)['powerW'] as double? ??
+                  ((doc.data() as Map<String, dynamic>)['powerW'] as num?)
+                      ?.toDouble() ??
                   0.0,
             )
             .toList()
             .reversed
-            .toList(); // mais antigo → recente
-
-        if (readings.isEmpty) {
-          return Container(
-            height: 200,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(child: Text('Sem dados')),
-          );
-        }
+            .toList();
 
         return Container(
           height: 240,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -413,7 +416,10 @@ class _ReadingsChart extends StatelessWidget {
   }
 }
 
-// PAINTER FUNCIONAL COM GUARD CONTRA DIVISÃO POR ZERO
+// ─────────────────────────────────────────────────────────────────────────────
+// PowerChartPainter
+// ─────────────────────────────────────────────────────────────────────────────
+
 class PowerChartPainter extends CustomPainter {
   final List<double> powerReadings;
 
@@ -449,31 +455,32 @@ class PowerChartPainter extends CustomPainter {
       );
     }
 
-    final path = Path();
-    final fillPath = Path();
-
-    // FIX 6: Guard contra divisão por zero quando só existe 1 leitura.
-    // Com powerReadings.length == 1, a expressão 'i / (length - 1)'
-    // resultava em '0 / 0' → NaN → o gráfico ficava em branco ou crashava.
-    // Quando há apenas 1 ponto, desenhamos um ponto central em vez de uma linha.
+    // Caso especial: só 1 leitura
     if (powerReadings.length == 1) {
       final x = padding.left + (size.width - padding.horizontal) / 2;
-      final normalizedPower = 1 - (powerReadings[0] / maxPower).clamp(0.0, 1.0);
       final y =
-          padding.top + (size.height - padding.vertical) * normalizedPower;
-      final dotPaint = Paint()
-        ..color = Colors.blue.shade400
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(Offset(x, y), 4, dotPaint);
+          padding.top +
+          (size.height - padding.vertical) *
+              (1 - (powerReadings[0] / maxPower).clamp(0.0, 1.0));
+      canvas.drawCircle(
+        Offset(x, y),
+        4,
+        Paint()
+          ..color = Colors.blue.shade400
+          ..style = PaintingStyle.fill,
+      );
     } else {
+      final path = Path();
+      final fillPath = Path();
+
       for (int i = 0; i < powerReadings.length; i++) {
         final x =
             padding.left +
             (size.width - padding.horizontal) * i / (powerReadings.length - 1);
-        final normalizedPower =
-            1 - (powerReadings[i] / maxPower).clamp(0.0, 1.0);
         final y =
-            padding.top + (size.height - padding.vertical) * normalizedPower;
+            padding.top +
+            (size.height - padding.vertical) *
+                (1 - (powerReadings[i] / maxPower).clamp(0.0, 1.0));
 
         if (i == 0) {
           path.moveTo(x, y);
@@ -492,7 +499,7 @@ class PowerChartPainter extends CustomPainter {
       canvas.drawPath(path, paintLine);
     }
 
-    // Eixo Y (max power)
+    // Label eixo Y
     final textPainter = TextPainter(
       text: TextSpan(
         text: '${maxPower.round()}W',
@@ -507,6 +514,10 @@ class PowerChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Widgets auxiliares
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _StatCard extends StatelessWidget {
   final String title;
@@ -577,45 +588,9 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _SimpleLineChartPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paintAxis = Paint()
-      ..color = Colors.grey
-      ..strokeWidth = 1;
-    final paintLine = Paint()
-      ..color = const Color(0xFF38A3F1)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawLine(
-      Offset(24, size.height - 24),
-      Offset(size.width - 8, size.height - 24),
-      paintAxis,
-    );
-    canvas.drawLine(Offset(24, 8), Offset(24, size.height - 24), paintAxis);
-
-    final points = <Offset>[
-      Offset(24, size.height - 80),
-      Offset(size.width * 0.25, size.height - 140),
-      Offset(size.width * 0.45, size.height - 90),
-      Offset(size.width * 0.7, size.height - 120),
-      Offset(size.width * 0.9, size.height - 60),
-    ];
-
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
-    }
-    canvas.drawPath(path, paintLine);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class _DetailRow extends StatelessWidget {
-  final String label, value;
+  final String label;
+  final String value;
   final IconData icon;
 
   const _DetailRow(this.label, this.value, this.icon);
@@ -643,28 +618,27 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Vistas do BottomNavigationBar
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _HistoricoView extends StatelessWidget {
   const _HistoricoView();
+
   @override
-  Widget build(BuildContext context) {
-    return const HistoricoPage();
-  }
+  Widget build(BuildContext context) => const HistoricoPage();
 }
 
 class _DispositivosView extends StatelessWidget {
   const _DispositivosView();
 
   @override
-  Widget build(BuildContext context) {
-    return const DevicesPage();
-  }
+  Widget build(BuildContext context) => const DevicesPage();
 }
 
 class _PerfilView extends StatelessWidget {
   const _PerfilView();
 
   @override
-  Widget build(BuildContext context) {
-    return const ProfilePage();
-  }
+  Widget build(BuildContext context) => const ProfilePage();
 }

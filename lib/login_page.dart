@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'register_page.dart';
+import 'home_page.dart';
+import 'services/user_service.dart';
+import 'services/notification_service.dart';
+import 'services/background_service.dart';
+import 'services/shelly_polling_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -32,41 +37,62 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text.trim(),
       );
 
-      // TODO: Navegar para o dashboard principal
-      // Navigator.pushReplacementNamed(context, '/home');
+      final uid = cred.user!.uid;
+
+      // Garante que o documento existe (caso seja um utilizador antigo)
+      await UserService.ensureUserExists(cred.user!);
+
+      // Inicia notificações, background e polling
+      /*NotificationService.startListeners(uid);
+      await BackgroundService.start();*/
+      await ShellyPollingService.start(uid);
+
+      if (!mounted) return;
+
+      // Navega para o ecrã principal e remove o login da pilha
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
     } on FirebaseAuthException catch (e) {
       String message = 'Ocorreu um erro. Tente novamente.';
-      if (e.code == 'user-not-found') {
-        message = 'Não existe utilizador com esse email.';
-      } else if (e.code == 'wrong-password') {
-        message = 'Password incorreta.';
-      } else if (e.code == 'invalid-email') {
-        message = 'Email inválido.';
+      switch (e.code) {
+        case 'user-not-found':
+          message = 'Não existe utilizador com esse email.';
+          break;
+        case 'wrong-password':
+        case 'invalid-credential':
+          message = 'Email ou password incorretos.';
+          break;
+        case 'invalid-email':
+          message = 'Email inválido.';
+          break;
+        case 'user-disabled':
+          message = 'Esta conta foi desativada.';
+          break;
+        case 'network-request-failed':
+          message = 'Sem ligação à internet.';
+          break;
       }
       setState(() => _errorText = message);
     } catch (_) {
       setState(() => _errorText = 'Erro inesperado. Tente novamente.');
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _resetPassword() async {
     final email = _emailCtrl.text.trim();
 
-    // Validação rápida
     if (email.isEmpty) {
-      setState(() => _errorText = 'Por favor, introduza o seu email primeiro.');
+      setState(() => _errorText = 'Introduza o seu email primeiro.');
       return;
     }
-
     if (!email.contains('@')) {
       setState(() => _errorText = 'Introduza um email válido.');
       return;
@@ -78,12 +104,10 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      // ENVIA O EMAIL DE REDEFINIÇÃO
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
 
       if (!mounted) return;
-
-      // MOSTRA CONFIRMAÇÃO
+      _passwordCtrl.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -93,12 +117,8 @@ class _LoginPageState extends State<LoginPage> {
           duration: Duration(seconds: 4),
         ),
       );
-
-      // Limpa o campo de password
-      _passwordCtrl.clear();
     } on FirebaseAuthException catch (e) {
       String message = 'Erro ao enviar email.';
-
       switch (e.code) {
         case 'invalid-email':
           message = 'Email inválido.';
@@ -109,25 +129,20 @@ class _LoginPageState extends State<LoginPage> {
         default:
           message = 'Erro: ${e.message}';
       }
-
-      if (mounted) {
-        setState(() => _errorText = message);
-      }
-    } catch (e) {
+      if (mounted) setState(() => _errorText = message);
+    } catch (_) {
       if (mounted) {
         setState(() => _errorText = 'Erro inesperado. Tente novamente.');
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final primaryColor = const Color(0xFF38A3F1);
+    const primaryColor = Color(0xFF38A3F1);
 
     return Scaffold(
       body: SafeArea(
@@ -145,7 +160,7 @@ class _LoginPageState extends State<LoginPage> {
                       height: 120,
                       child: FittedBox(
                         child: Text(
-                          'SIGED',
+                          'AVERIS',
                           style: theme.textTheme.displayMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                             letterSpacing: 2,
@@ -211,9 +226,7 @@ class _LoginPageState extends State<LoginPage> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : _resetPassword, // ← FUNCIONA AQUI
+                  onPressed: _isLoading ? null : _resetPassword,
                   child: const Text(
                     'Esqueceu a sua password?',
                     style: TextStyle(fontSize: 13),
@@ -223,9 +236,17 @@ class _LoginPageState extends State<LoginPage> {
 
               if (_errorText != null) ...[
                 const SizedBox(height: 4),
-                Text(
-                  _errorText!,
-                  style: const TextStyle(color: Colors.red, fontSize: 13),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Text(
+                    _errorText!,
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                  ),
                 ),
               ],
 
@@ -250,7 +271,10 @@ class _LoginPageState extends State<LoginPage> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Entrar'),
+                      : const Text(
+                          'Entrar',
+                          style: TextStyle(color: Colors.white),
+                        ),
                 ),
               ),
 
@@ -261,11 +285,9 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   const Text('Sem conta?'),
                   TextButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const RegisterPage()),
-                      );
-                    },
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const RegisterPage()),
+                    ),
                     child: const Text('Criar conta'),
                   ),
                 ],
@@ -277,6 +299,10 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UnderlineInput — campo de texto com borda inferior
+// ─────────────────────────────────────────────────────────────────────────────
 
 class UnderlineInput extends StatelessWidget {
   final TextEditingController controller;
@@ -307,6 +333,9 @@ class UnderlineInput extends StatelessWidget {
         border: const UnderlineInputBorder(),
         focusedBorder: const UnderlineInputBorder(
           borderSide: BorderSide(color: Colors.black87, width: 1.2),
+        ),
+        errorBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.red.shade400),
         ),
       ),
     );

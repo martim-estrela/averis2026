@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'services/background_service.dart';
 import 'services/notification_service.dart';
+import 'services/background_service.dart';
+import 'services/shelly_polling_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos de contrato de energia em Portugal
@@ -33,7 +34,6 @@ extension TipoContratoLabel on TipoContrato {
     }
   }
 
-  /// Preços de referência ERSE 2024 com IVA 23% (€/kWh)
   Map<String, double> get precosReferencia {
     switch (this) {
       case TipoContrato.simples:
@@ -90,13 +90,17 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _logout() async {
     setState(() => _isLoggingOut = true);
     try {
-      // Para os listeners e as tarefas de background antes de fazer logout
-      NotificationService.stopListeners();
-      await BackgroundService.cancelTasks();
+      // Para todos os serviços antes de fazer logout
+      /*NotificationService.stopListeners();*/
+      ShellyPollingService.stop();
+      /*await BackgroundService.stop();*/
 
       await FirebaseAuth.instance.signOut();
+
       if (!mounted) return;
-      Navigator.of(context).pop();
+
+      // ✅ Volta à raiz — o AuthWrapper deteta o logout e mostra o LoginPage
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -144,7 +148,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 (settings['energyContract'] as Map?)?.cast<String, dynamic>() ??
                 {};
 
-            // Notificações
             final deviceOffline = notifications['deviceOffline'] == true;
             final highConsumption = notifications['highConsumption'] == true;
             final goalReached = notifications['goalReached'] == true;
@@ -158,7 +161,6 @@ class _SettingsPageState extends State<SettingsPage> {
             final quietStart = (quiet['start'] as String?) ?? '22:00';
             final quietEnd = (quiet['end'] as String?) ?? '07:00';
 
-            // Contrato de energia
             final tipoStr = (energyContract['tipo'] as String?) ?? 'simples';
             final tipoContrato = TipoContrato.values.firstWhere(
               (t) => t.name == tipoStr,
@@ -184,6 +186,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           .update({
                             'settings.energyContract.tipo': tipo.name,
                             'settings.energyContract.precos': novosPrecos,
+                            // ✅ Mantém energyPrice sincronizado com o preço principal
+                            'settings.energyPrice': novosPrecos.values.first,
                           });
                     },
                   ),
@@ -203,8 +207,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           .collection('users')
                           .doc(uid)
                           .update({'settings.notifications': map});
-
-                      // Reinicia os listeners com as novas preferências
                       NotificationService.startListeners(uid);
                     },
                   ),
@@ -283,7 +285,7 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SECÇÃO ENERGIA — tipo de contrato + preços por período
+// SECÇÃO ENERGIA
 // ═══════════════════════════════════════════════════════════════
 
 class _EnergiaSection extends StatefulWidget {
@@ -383,8 +385,6 @@ class _EnergiaSectionState extends State<_EnergiaSection> {
               style: txt.bodySmall?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-
-            // Seletor de tipo
             ...TipoContrato.values.map((tipo) {
               return RadioListTile<TipoContrato>(
                 dense: true,
@@ -401,10 +401,7 @@ class _EnergiaSectionState extends State<_EnergiaSection> {
                 },
               );
             }),
-
             const Divider(height: 24),
-
-            // Campos de preço
             Text(
               'Preços (€/kWh com IVA)',
               style: txt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
@@ -434,8 +431,6 @@ class _EnergiaSectionState extends State<_EnergiaSection> {
                 ),
               );
             }),
-
-            // Info tarifas
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(

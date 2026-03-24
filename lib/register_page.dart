@@ -34,41 +34,56 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     try {
+      // 1. Cria a conta no Firebase Auth
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text.trim(),
       );
 
-      // ← AQUI: cria documento no Firestore AUTOMATICAMENTE
-      await UserService.ensureUserDocument(cred.user!);
+      // 2. Atualiza o displayName no Auth
       await cred.user?.updateDisplayName(_nameCtrl.text.trim());
+
+      // 3. ✅ Cria o documento no Firestore com a estrutura completa
+      //    Passa o displayName explicitamente porque updateDisplayName
+      //    pode ainda não estar refletido em cred.user no mesmo tick
+      await UserService.initUser(
+        cred.user!,
+        displayName: _nameCtrl.text.trim(),
+      );
+
+      // 4. Envia email de verificação
       await cred.user?.sendEmailVerification();
 
       if (!mounted) return;
       Navigator.of(context).pop(); // volta ao login
     } on FirebaseAuthException catch (e) {
       String message = 'Ocorreu um erro ao criar a conta.';
-      if (e.code == 'email-already-in-use') {
-        message = 'Já existe uma conta com este email.';
-      } else if (e.code == 'weak-password') {
-        message = 'A password é demasiado fraca.';
-      } else if (e.code == 'invalid-email') {
-        message = 'Email inválido.';
+      switch (e.code) {
+        case 'email-already-in-use':
+          message = 'Já existe uma conta com este email.';
+          break;
+        case 'weak-password':
+          message = 'A password é demasiado fraca (mínimo 6 caracteres).';
+          break;
+        case 'invalid-email':
+          message = 'Email inválido.';
+          break;
+        case 'network-request-failed':
+          message = 'Sem ligação à internet.';
+          break;
       }
       setState(() => _errorText = message);
     } catch (_) {
       setState(() => _errorText = 'Erro inesperado. Tente novamente.');
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final primaryColor = const Color(0xFF38A3F1);
+    const primaryColor = Color(0xFF38A3F1);
 
     return Scaffold(
       body: SafeArea(
@@ -86,7 +101,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       height: 120,
                       child: FittedBox(
                         child: Text(
-                          'SIGED',
+                          'AVERIS',
                           style: theme.textTheme.displayMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                             letterSpacing: 2,
@@ -172,9 +187,17 @@ class _RegisterPageState extends State<RegisterPage> {
               const SizedBox(height: 24),
 
               if (_errorText != null) ...[
-                Text(
-                  _errorText!,
-                  style: const TextStyle(color: Colors.red, fontSize: 13),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Text(
+                    _errorText!,
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                  ),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -198,7 +221,10 @@ class _RegisterPageState extends State<RegisterPage> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Criar Conta'),
+                      : const Text(
+                          'Criar Conta',
+                          style: TextStyle(color: Colors.white),
+                        ),
                 ),
               ),
 
@@ -206,10 +232,8 @@ class _RegisterPageState extends State<RegisterPage> {
 
               Center(
                 child: TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('Já tens uma conta?'),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Já tens uma conta? Iniciar sessão'),
                 ),
               ),
             ],
@@ -219,6 +243,10 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UnderlineInput — campo de texto com borda inferior
+// ─────────────────────────────────────────────────────────────────────────────
 
 class UnderlineInput extends StatelessWidget {
   final TextEditingController controller;
@@ -243,11 +271,15 @@ class UnderlineInput extends StatelessWidget {
       obscureText: obscureText,
       keyboardType: keyboardType,
       validator: validator,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
+        hintText: hintText,
         isDense: true,
-        border: UnderlineInputBorder(),
-        focusedBorder: UnderlineInputBorder(
+        border: const UnderlineInputBorder(),
+        focusedBorder: const UnderlineInputBorder(
           borderSide: BorderSide(color: Colors.black87, width: 1.2),
+        ),
+        errorBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.red.shade400),
         ),
       ),
     );
