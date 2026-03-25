@@ -125,23 +125,30 @@ const List<_Conquista> kConquistas = [
   _Conquista(
     key: 'firstSaving',
     label: 'Primeira Poupança',
-    descricao: 'Poupaste energia pela primeira vez.',
+    descricao: 'Poupaste ≥5% abaixo da tua média num dia.',
     icon: Icons.eco,
     cor: Color(0xFF66BB6A),
   ),
   _Conquista(
-    key: 'sevenDaysBelowAverage',
-    label: '7 Dias Abaixo da Média',
-    descricao: 'Consumiste menos do que a tua média durante 7 dias seguidos.',
-    icon: Icons.trending_down,
-    cor: Color(0xFF42A5F5),
+    key: 'savedInWeekend',
+    label: 'Fim de Semana Verde',
+    descricao: 'Poupaste ≥5% abaixo da média num sábado ou domingo.',
+    icon: Icons.weekend,
+    cor: Color(0xFF26A69A),
   ),
   _Conquista(
-    key: 'topTenPercentMonth',
-    label: 'Top 10% do Mês',
-    descricao: 'Estiveste no top 10% de utilizadores mais eficientes.',
-    icon: Icons.workspace_premium,
-    cor: Color(0xFFFFCA28),
+    key: 'streak3Days',
+    label: '3 Dias Consecutivos',
+    descricao: 'Consumiste abaixo da média 3 dias seguidos.',
+    icon: Icons.local_fire_department,
+    cor: Color(0xFFFF7043),
+  ),
+  _Conquista(
+    key: 'sevenDaysBelowAverage',
+    label: '7 Dias Abaixo da Média',
+    descricao: 'Consumiste abaixo da média 7 dias consecutivos.',
+    icon: Icons.trending_down,
+    cor: Color(0xFF42A5F5),
   ),
   _Conquista(
     key: 'reachedLevel3',
@@ -149,13 +156,6 @@ const List<_Conquista> kConquistas = [
     descricao: 'Atingiste o nível 3 – Eficiente.',
     icon: Icons.bolt,
     cor: Color(0xFFFFB300),
-  ),
-  _Conquista(
-    key: 'savedInWeekend',
-    label: 'Fim de Semana Verde',
-    descricao: 'Poupaste energia num fim de semana.',
-    icon: Icons.weekend,
-    cor: Color(0xFF26A69A),
   ),
   _Conquista(
     key: 'reachedLevel5',
@@ -636,7 +636,8 @@ class _ConquistasCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final txt = Theme.of(context).textTheme;
-    final desbloqueadas = achievements.values.where((v) => v == true).length;
+    final desbloqueadas =
+        kConquistas.where((c) => achievements[c.key] == true).length;
 
     return Card(
       child: Padding(

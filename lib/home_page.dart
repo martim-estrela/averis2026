@@ -91,104 +91,109 @@ class _DashboardViewState extends State<_DashboardView> {
       return const Center(child: Text('Sessão inválida'));
     }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('devices')
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Dashboard')),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('devices')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.electrical_services_outlined,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 16),
+                  Text('Sem dispositivos'),
+                  SizedBox(height: 8),
+                  Text(
+                    'Adiciona um Smart Plug no separador Dispositivos',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final devices = snapshot.data!.docs;
+          final docList = devices
+              .cast<QueryDocumentSnapshot<Map<String, dynamic>>>();
+
+          // Seleciona o dispositivo atual ou o primeiro da lista
+          final selectedDevice = docList.firstWhere(
+            (d) => d.id == _selectedDeviceId,
+            orElse: () => docList.first,
+          );
+          final deviceData = selectedDevice.data();
+          final ip = (deviceData['ip'] as String?) ?? '';
+          final deviceType = (deviceData['type'] as String?) ?? 'shelly-plug';
+
+          return SingleChildScrollView(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.electrical_services_outlined,
-                  size: 64,
-                  color: Colors.grey,
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      labelText: 'Dispositivo',
+                      border: OutlineInputBorder(),
+                    ),
+                    initialValue: _selectedDeviceId ?? docList.first.id,
+                    items: devices.map((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final isOnline = data['online'] == true;
+                      return DropdownMenuItem<String>(
+                        value: doc.id,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: isOnline ? Colors.green : Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            Text((data['name'] as String?) ?? 'Sem nome'),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedDeviceId = value),
+                  ),
                 ),
-                SizedBox(height: 16),
-                Text('Sem dispositivos'),
-                SizedBox(height: 8),
-                Text(
-                  'Adiciona um Smart Plug no separador Dispositivos',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+
+                // Métricas em tempo real
+                _LiveMetricsCard(
+                  deviceId: selectedDevice.id,
+                  shellyIp: ip,
+                  userId: userId,
+                  deviceType: deviceType,
                 ),
+
+                // Gráfico histórico
+                _ReadingsChart(deviceId: selectedDevice.id),
+                const SizedBox(height: 16),
               ],
             ),
           );
-        }
-
-        final devices = snapshot.data!.docs;
-        final docList = devices
-            .cast<QueryDocumentSnapshot<Map<String, dynamic>>>();
-
-        // Seleciona o dispositivo atual ou o primeiro da lista
-        final selectedDevice = docList.firstWhere(
-          (d) => d.id == _selectedDeviceId,
-          orElse: () => docList.first,
-        );
-        final deviceData = selectedDevice.data();
-        final ip = (deviceData['ip'] as String?) ?? '';
-        final deviceType = (deviceData['type'] as String?) ?? 'shelly-plug';
-
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Dispositivo',
-                  border: OutlineInputBorder(),
-                ),
-                initialValue: _selectedDeviceId ?? docList.first.id,
-                items: devices.map((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final isOnline = data['online'] == true;
-                  return DropdownMenuItem<String>(
-                    value: doc.id,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: isOnline ? Colors.green : Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        Text((data['name'] as String?) ?? 'Sem nome'),
-                      ],
-                    ),
-                  );
-                }).toList(),
-                onChanged: (value) => setState(() => _selectedDeviceId = value),
-              ),
-            ),
-
-            // Métricas em tempo real
-            Expanded(
-              child: _LiveMetricsCard(
-                deviceId: selectedDevice.id,
-                shellyIp: ip,
-                userId: userId,
-                deviceType: deviceType,
-              ),
-            ),
-
-            // Gráfico histórico
-            Expanded(child: _ReadingsChart(deviceId: selectedDevice.id)),
-          ],
-        );
-      },
+        },
+      ),
     );
   }
 }
@@ -308,60 +313,50 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
     final todayKwh = _metrics.totalKwh.clamp(0.0, double.infinity);
     final cost = todayKwh * _energyPrice;
 
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Título + badge online/offline
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Dashboard',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
+          // Badge online/offline
+          Align(
+            alignment: Alignment.centerRight,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: _isOnline
+                    ? Colors.green.withValues(alpha: 0.15)
+                    : Colors.red.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _isOnline ? Colors.green : Colors.red,
+                  width: 1,
+                ),
               ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _isOnline
-                      ? Colors.green.withValues(alpha: 0.15)
-                      : Colors.red.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: _isOnline ? Colors.green : Colors.red,
-                    width: 1,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: _isOnline ? Colors.green : Colors.red,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: _isOnline ? Colors.green : Colors.red,
-                        shape: BoxShape.circle,
-                      ),
+                  const SizedBox(width: 5),
+                  Text(
+                    _isOnline ? 'Online' : 'Offline',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _isOnline ? Colors.green[700] : Colors.red[700],
                     ),
-                    const SizedBox(width: 5),
-                    Text(
-                      _isOnline ? 'Online' : 'Offline',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _isOnline ? Colors.green[700] : Colors.red[700],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           // Banner de streak (só aparece quando streak >= 2)
           if (_streakDias >= 2) ...[
@@ -499,12 +494,12 @@ class _ReadingsChart extends StatelessWidget {
           .doc(deviceId)
           .collection('readings')
           .orderBy('timestamp', descending: true)
-          .limit(24)
+          .limit(30)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Container(
-            height: 200,
+            height: 220,
             margin: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.grey[100],
@@ -514,31 +509,49 @@ class _ReadingsChart extends StatelessWidget {
           );
         }
 
-        final readings = snapshot.data!.docs
-            .map(
-              (doc) =>
-                  ((doc.data() as Map<String, dynamic>)['powerW'] as num?)
-                      ?.toDouble() ??
-                  0.0,
-            )
-            .toList()
-            .reversed
-            .toList();
+        final docs = snapshot.data!.docs.reversed.toList();
+        final powerValues = <double>[];
+        final timestamps = <DateTime?>[];
+
+        for (final doc in docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          powerValues.add((data['powerW'] as num?)?.toDouble() ?? 0.0);
+          final ts = data['timestamp'];
+          timestamps.add(ts is Timestamp ? ts.toDate() : null);
+        }
 
         return Container(
-          height: 240,
           margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(4, 12, 12, 8),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05), blurRadius: 10),
             ],
           ),
-          child: CustomPaint(
-            size: Size.infinite,
-            painter: PowerChartPainter(readings),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 12, bottom: 6),
+                child: Text(
+                  'Potência (W) — últimas ${powerValues.length} leituras',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                ),
+              ),
+              SizedBox(
+                height: 200,
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: PowerChartPainter(powerValues, timestamps),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -552,97 +565,163 @@ class _ReadingsChart extends StatelessWidget {
 
 class PowerChartPainter extends CustomPainter {
   final List<double> powerReadings;
+  final List<DateTime?> timestamps;
 
-  PowerChartPainter(this.powerReadings);
+  PowerChartPainter(this.powerReadings, this.timestamps);
+
+  static const double _leftPad = 52;
+  static const double _rightPad = 12;
+  static const double _topPad = 10;
+  static const double _bottomPad = 32;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (powerReadings.isEmpty) return;
 
-    final paintLine = Paint()
-      ..color = Colors.blue.shade400
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke;
+    final cLeft = _leftPad;
+    final cRight = size.width - _rightPad;
+    final cTop = _topPad;
+    final cBottom = size.height - _bottomPad;
+    final cWidth = cRight - cLeft;
+    final cHeight = cBottom - cTop;
 
-    final paintFill = Paint()
-      ..color = Colors.blue.withOpacity(0.2)
-      ..style = PaintingStyle.fill;
+    final rawMax = powerReadings.reduce(math.max).clamp(1.0, double.infinity);
+    final niceMax = _niceMax(rawMax);
 
-    final paintGrid = Paint()
-      ..color = Colors.grey.shade300
+    final gridPaint = Paint()
+      ..color = Colors.grey.shade200
+      ..strokeWidth = 1;
+    final axisPaint = Paint()
+      ..color = Colors.grey.shade400
       ..strokeWidth = 1;
 
-    final maxPower = powerReadings.reduce(math.max).clamp(1.0, double.infinity);
-    const padding = EdgeInsets.fromLTRB(40, 20, 20, 40);
-
-    // Grid horizontal
-    for (int i = 0; i <= 4; i++) {
-      final y = padding.top + (size.height - padding.vertical) * (1 - i / 4);
-      canvas.drawLine(
-        Offset(padding.left, y),
-        Offset(size.width - padding.right, y),
-        paintGrid,
-      );
+    // ── Gridlines + Y labels ────────────────────────────────────────────────
+    const steps = 4;
+    for (int i = 0; i <= steps; i++) {
+      final y = cTop + cHeight * (1 - i / steps);
+      canvas.drawLine(Offset(cLeft, y), Offset(cRight, y), gridPaint);
+      final label = '${(niceMax * i / steps).round()}W';
+      _drawLabel(canvas, label, Offset(0, y - 7), _leftPad - 6,
+          align: TextAlign.right);
     }
 
-    // Caso especial: só 1 leitura
+    // ── Axis lines ──────────────────────────────────────────────────────────
+    canvas.drawLine(Offset(cLeft, cTop), Offset(cLeft, cBottom), axisPaint);
+    canvas.drawLine(Offset(cLeft, cBottom), Offset(cRight, cBottom), axisPaint);
+
+    // ── Data path ───────────────────────────────────────────────────────────
+    double xOf(int i) =>
+        powerReadings.length == 1
+            ? cLeft + cWidth / 2
+            : cLeft + cWidth * i / (powerReadings.length - 1);
+    double yOf(int i) =>
+        cTop + cHeight * (1 - (powerReadings[i] / niceMax).clamp(0.0, 1.0));
+
     if (powerReadings.length == 1) {
-      final x = padding.left + (size.width - padding.horizontal) / 2;
-      final y =
-          padding.top +
-          (size.height - padding.vertical) *
-              (1 - (powerReadings[0] / maxPower).clamp(0.0, 1.0));
       canvas.drawCircle(
-        Offset(x, y),
+        Offset(xOf(0), yOf(0)),
         4,
         Paint()
-          ..color = Colors.blue.shade400
+          ..color = Colors.blue.shade500
           ..style = PaintingStyle.fill,
       );
     } else {
-      final path = Path();
-      final fillPath = Path();
-
-      for (int i = 0; i < powerReadings.length; i++) {
-        final x =
-            padding.left +
-            (size.width - padding.horizontal) * i / (powerReadings.length - 1);
-        final y =
-            padding.top +
-            (size.height - padding.vertical) *
-                (1 - (powerReadings[i] / maxPower).clamp(0.0, 1.0));
-
-        if (i == 0) {
-          path.moveTo(x, y);
-          fillPath.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-          fillPath.lineTo(x, y);
-        }
+      final linePath = Path()..moveTo(xOf(0), yOf(0));
+      final fillPath = Path()..moveTo(xOf(0), yOf(0));
+      for (int i = 1; i < powerReadings.length; i++) {
+        linePath.lineTo(xOf(i), yOf(i));
+        fillPath.lineTo(xOf(i), yOf(i));
       }
-
-      fillPath.lineTo(size.width - padding.right, size.height - padding.bottom);
-      fillPath.lineTo(padding.left, size.height - padding.bottom);
+      fillPath.lineTo(cRight, cBottom);
+      fillPath.lineTo(cLeft, cBottom);
       fillPath.close();
 
-      canvas.drawPath(fillPath, paintFill);
-      canvas.drawPath(path, paintLine);
+      // Gradient fill
+      canvas.drawPath(
+        fillPath,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.blue.shade300.withValues(alpha: 0.35),
+              Colors.blue.shade100.withValues(alpha: 0.05),
+            ],
+          ).createShader(Rect.fromLTWH(cLeft, cTop, cWidth, cHeight))
+          ..style = PaintingStyle.fill,
+      );
+
+      // Line
+      canvas.drawPath(
+        linePath,
+        Paint()
+          ..color = Colors.blue.shade500
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+
+      // Dots (só quando pontos suficientemente espaçados)
+      if (powerReadings.length <= 20) {
+        for (int i = 0; i < powerReadings.length; i++) {
+          canvas.drawCircle(Offset(xOf(i), yOf(i)), 4,
+              Paint()..color = Colors.white..style = PaintingStyle.fill);
+          canvas.drawCircle(Offset(xOf(i), yOf(i)), 3,
+              Paint()..color = Colors.blue.shade600..style = PaintingStyle.fill);
+        }
+      }
     }
 
-    // Label eixo Y
-    final textPainter = TextPainter(
+    // ── X labels (timestamps) ───────────────────────────────────────────────
+    final labelIndices = _pickIndices(powerReadings.length, 5);
+    for (final i in labelIndices) {
+      if (i >= timestamps.length) continue;
+      final t = timestamps[i];
+      if (t == null) continue;
+      final x = xOf(i);
+      final label =
+          '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+      _drawLabel(canvas, label, Offset(x - 20, cBottom + 6), 40,
+          align: TextAlign.center);
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  double _niceMax(double v) {
+    if (v <= 10) return 10;
+    if (v <= 50) return (v / 10).ceil() * 10.0;
+    if (v <= 500) return (v / 50).ceil() * 50.0;
+    if (v <= 2000) return (v / 100).ceil() * 100.0;
+    return (v / 500).ceil() * 500.0;
+  }
+
+  List<int> _pickIndices(int count, int max) {
+    if (count <= 1) return [0];
+    if (count <= max) return List.generate(count, (i) => i);
+    return List.generate(max, (i) => ((count - 1) * i / (max - 1)).round());
+  }
+
+  void _drawLabel(Canvas canvas, String text, Offset offset, double maxWidth,
+      {TextAlign align = TextAlign.left}) {
+    final tp = TextPainter(
       text: TextSpan(
-        text: '${maxPower.round()}W',
-        style: const TextStyle(color: Colors.grey, fontSize: 12),
+        text: text,
+        style: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 10,
+            fontWeight: FontWeight.w400),
       ),
+      textAlign: align,
       textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(5, padding.top - 5));
+    )..layout(maxWidth: maxWidth);
+    tp.paint(canvas, offset);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant PowerChartPainter old) =>
+      old.powerReadings != powerReadings;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

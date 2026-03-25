@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'add_device_page.dart';
+import 'services/gamification_service.dart';
 import 'services/smart_plug_service.dart';
 
 class DevicesPage extends StatelessWidget {
@@ -89,9 +90,10 @@ class DevicesPage extends StatelessWidget {
                   final ip = (deviceData['ip'] as String?) ?? '';
                   final type =
                       (deviceData['type'] as String?) ?? 'shelly-plug';
-                  // ✅ Passa uid ao SmartPlugService
                   await SmartPlugService.toggle(
                       userId, deviceDoc.id, ip, type, isOn);
+                  GamificationService.awardActionPoints(
+                      uid: userId, points: 2);
                 },
                 onDelete: () async {
                   final confirm = await showDialog<bool>(

@@ -128,13 +128,12 @@ class GamificationService {
     updates['lastStreakDate'] = today;
 
     // Conquistas
-    final achievementUpdates = await _checkAchievements(
-      uid: uid,
+    final achievementUpdates = _checkAchievements(
       achievements: achievements,
       poupancaPct: poupancaPct,
       novoNivel: novoNivel,
       dia: dia,
-      mediaKwh: mediaKwh,
+      novoStreak: novoStreak,
     );
     updates.addAll(achievementUpdates);
 
@@ -187,17 +186,15 @@ class GamificationService {
 
   // ── Conquistas ────────────────────────────────────────────────────────────
 
-  static Future<Map<String, dynamic>> _checkAchievements({
-    required String uid,
+  static Map<String, dynamic> _checkAchievements({
     required Map<String, dynamic> achievements,
     required double poupancaPct,
     required int novoNivel,
     required DateTime dia,
-    required double mediaKwh,
-  }) async {
+    required int novoStreak,
+  }) {
     final Map<String, dynamic> updates = {};
 
-    // firstSaving: requer >=5% de poupança (evita desbloqueio trivial)
     if (achievements['firstSaving'] != true && poupancaPct >= 5) {
       updates['achievements.firstSaving'] = true;
     }
@@ -214,47 +211,14 @@ class GamificationService {
         updates['achievements.savedInWeekend'] = true;
       }
     }
-    if (achievements['sevenDaysBelowAverage'] != true) {
-      final hasStreak = await _checkSevenDayStreak(uid, mediaKwh);
-      if (hasStreak) updates['achievements.sevenDaysBelowAverage'] = true;
+    if (achievements['streak3Days'] != true && novoStreak >= 3) {
+      updates['achievements.streak3Days'] = true;
+    }
+    if (achievements['sevenDaysBelowAverage'] != true && novoStreak >= 7) {
+      updates['achievements.sevenDaysBelowAverage'] = true;
     }
 
     return updates;
-  }
-
-  static Future<bool> _checkSevenDayStreak(
-      String uid, double mediaKwh) async {
-    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
-
-    final devicesSnap = await _db
-        .collection('users')
-        .doc(uid)
-        .collection('devices')
-        .get();
-    if (devicesSnap.docs.isEmpty) return false;
-
-    final Map<String, double> kwhPorDia = {};
-
-    for (final deviceDoc in devicesSnap.docs) {
-      final statsSnap = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('devices')
-          .doc(deviceDoc.id)
-          .collection('dailyStats')
-          .where(FieldPath.documentId,
-              isGreaterThanOrEqualTo: _dateKey(sevenDaysAgo))
-          .get();
-
-      for (final doc in statsSnap.docs) {
-        final kwh =
-            (doc.data()['estimatedKwh'] as num?)?.toDouble() ?? 0.0;
-        kwhPorDia[doc.id] = (kwhPorDia[doc.id] ?? 0) + kwh;
-      }
-    }
-
-    if (kwhPorDia.length < 7) return false;
-    return kwhPorDia.values.every((kwh) => kwh < mediaKwh);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

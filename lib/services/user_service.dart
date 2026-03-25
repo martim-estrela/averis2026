@@ -48,9 +48,8 @@ class UserService {
     final snap = await _userRef(user.uid).get();
     if (!snap.exists) {
       await _userRef(user.uid).set(_buildUserDocument(user));
-    } else {
-      await _userRef(user.uid).set(_buildUserDefaults(), SetOptions(merge: true));
     }
+    // Se o documento já existe não toca em nada — impede reset de pontos/nível.
   }
 
   // ── Estrutura do documento do utilizador ─────────────────────────────────
@@ -73,63 +72,8 @@ class UserService {
       },
       'achievements': {
         'firstSaving': false,
+        'streak3Days': false,
         'sevenDaysBelowAverage': false,
-        'topTenPercentMonth': false,
-        'reachedLevel3': false,
-        'savedInWeekend': false,
-        'reachedLevel5': false,
-      },
-      'privacy': {'shareAnonymous': false},
-      'settings': {
-        'energyPrice': 0.22,
-        'includeTax': true,
-        'energyContract': {
-          'tipo': 'simples',
-          'precos': {'simples': 0.2134},
-        },
-        'notifications': {
-          'deviceOffline': true,
-          'highConsumption': true,
-          'goalReached': true,
-          'levelUp': true,
-          'quietHours': {
-            'enabled': false,
-            'start': '22:00',
-            'end': '07:00',
-          },
-        },
-        'automations': {
-          'turnAllOffAtMidnight': false,
-          'weekdayMorningOn': {
-            'enabled': false,
-            'time': '07:00',
-            'deviceIds': [],
-          },
-        },
-      },
-      '_notifState': {
-        'lastGoal': false,
-        'lastLevel': 1,
-        'deviceStates': {},
-      },
-    };
-  }
-
-  static Map<String, dynamic> _buildUserDefaults() {
-    return {
-      'nivel': 1,
-      'pontos': 0,
-      'pontosTotal': 0,
-      'consumoMes': 0.0,
-      'goals': {
-        'monthlyKwhTarget': 0.0,
-        'monthlyCostTarget': 0.0,
-        'focus': 'cost',
-      },
-      'achievements': {
-        'firstSaving': false,
-        'sevenDaysBelowAverage': false,
-        'topTenPercentMonth': false,
         'reachedLevel3': false,
         'savedInWeekend': false,
         'reachedLevel5': false,
