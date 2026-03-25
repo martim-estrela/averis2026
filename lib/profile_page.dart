@@ -212,6 +212,7 @@ class ProfilePage extends StatelessWidget {
             final pontosTotal = (data['pontosTotal'] as num?)?.toInt() ?? 0;
             final pontosNivel = (data['pontos'] as num?)?.toInt() ?? 0;
             final nivelNum = (data['nivel'] as num?)?.toInt() ?? 1;
+            final streakDias = (data['streakDias'] as num?)?.toInt() ?? 0;
 
             final nivel = xpLevelForPontos(pontosTotal);
             final progress = xpProgress(pontosTotal, nivel);
@@ -265,6 +266,7 @@ class ProfilePage extends StatelessWidget {
                     nivel: nivel,
                     progress: progress,
                     proximoNivel: proximoNivel,
+                    streakDias: streakDias,
                   ),
                   const SizedBox(height: 24),
 
@@ -450,6 +452,7 @@ class _XpCard extends StatelessWidget {
   final XpLevel nivel;
   final double progress;
   final XpLevel? proximoNivel;
+  final int streakDias;
 
   const _XpCard({
     required this.pontosTotal,
@@ -458,6 +461,7 @@ class _XpCard extends StatelessWidget {
     required this.nivel,
     required this.progress,
     this.proximoNivel,
+    this.streakDias = 0,
   });
 
   @override
@@ -553,6 +557,32 @@ class _XpCard extends StatelessWidget {
             ],
           ),
 
+          if (streakDias >= 2) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Text('🔥', style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$streakDias dias consecutivos abaixo da média!',
+                      style: txt.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.deepOrange,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 8),
@@ -561,11 +591,12 @@ class _XpCard extends StatelessWidget {
             style: txt.bodySmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
-          // ✅ Dicas alinhadas com GamificationService._calcularPontos()
           _xpDica(context, '⚡', 'Poupança 5–10% vs média diária', '+5 XP'),
           _xpDica(context, '💪', 'Poupança 10–20% vs média diária', '+15 XP'),
           _xpDica(context, '🌿', 'Poupança 20–30% vs média diária', '+25 XP'),
           _xpDica(context, '🏅', 'Poupança > 30% vs média diária', '+50 XP'),
+          _xpDica(context, '🔌', 'Ligar/desligar dispositivo na app', '+2 XP'),
+          _xpDica(context, '➕', 'Adicionar novo dispositivo', '+5 XP'),
         ],
       ),
     );

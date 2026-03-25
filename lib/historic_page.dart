@@ -183,8 +183,8 @@ class _HistoricoPageState extends State<HistoricoPage> {
         final dailyStats = snapshot.data!;
         final totalKwh =
             dailyStats.map((d) => d.kwh).reduce((a, b) => a + b);
-        final baselineKwh = totalKwh * 1.2;
-        final poupancaKwh = baselineKwh - totalKwh;
+        final custoTotal = totalKwh * _energyPrice;
+        final mediaKwhDia = totalKwh / dailyStats.length;
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -192,13 +192,25 @@ class _HistoricoPageState extends State<HistoricoPage> {
               children: [
                 Expanded(
                     child: _StatCard('Total',
-                        '${totalKwh.toStringAsFixed(1)} kWh')),
+                        '${totalKwh.toStringAsFixed(2)} kWh')),
                 const SizedBox(width: 12),
                 Expanded(
                     child: _StatCard(
-                        'Poupança',
-                        '${poupancaKwh.toStringAsFixed(1)} kWh',
-                        color: Colors.green)),
+                        'Custo Total',
+                        '${custoTotal.toStringAsFixed(2)} €',
+                        color: Colors.orange)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                    child: _StatCard('Média Diária',
+                        '${mediaKwhDia.toStringAsFixed(2)} kWh/dia')),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: _StatCard('Dias com dados',
+                        '${dailyStats.length}')),
               ],
             ),
             const SizedBox(height: 24),
@@ -206,7 +218,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
               height: 250,
               child: CustomPaint(
                 size: Size.infinite,
-                painter: DailyChartPainter(dailyStats, baselineKwh),
+                painter: DailyChartPainter(dailyStats, totalKwh / dailyStats.length),
               ),
             ),
           ],
@@ -234,13 +246,15 @@ class _HistoricoPageState extends State<HistoricoPage> {
             final dia = dias[i];
             final isAboveMedia = dia.kwh > mediaKwh;
             final pontos = _calculatePontos(dia.kwh, mediaKwh);
+            final meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+            final dataFmt = '${dia.date.day} ${meses[dia.date.month - 1]} ${dia.date.year}';
             return Card(
               color: isAboveMedia ? Colors.red.shade50 : null,
               child: ListTile(
                 leading: CircleAvatar(child: Text('${dia.diaDia}')),
-                title: Text('${dia.kwh.toStringAsFixed(1)} kWh'),
+                title: Text(dataFmt),
                 subtitle: Text(
-                    '${(dia.kwh * _energyPrice).toStringAsFixed(2)} € • +${pontos.round()} pts'),
+                    '${dia.kwh.toStringAsFixed(2)} kWh  •  ${(dia.kwh * _energyPrice).toStringAsFixed(2)} €  •  +${pontos.round()} pts'),
                 trailing: isAboveMedia
                     ? const Chip(
                         label: Text('↑ Acima média',
@@ -274,10 +288,16 @@ class _HistoricoPageState extends State<HistoricoPage> {
               child: ListTile(
                 leading: CircleAvatar(child: Text('${i + 1}')),
                 title: Text(device.name),
-                trailing: Text(
-                  '${device.kwh.toStringAsFixed(1)} kWh\n'
-                  '${device.percent?.toStringAsFixed(1) ?? '0.0'}%',
-                  textAlign: TextAlign.end,
+                subtitle: Text('${device.percent?.toStringAsFixed(1) ?? '0.0'}% do total'),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('${device.kwh.toStringAsFixed(2)} kWh',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('${(device.kwh * _energyPrice).toStringAsFixed(2)} €',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                  ],
                 ),
               ),
             );
@@ -406,7 +426,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
           dayReadings.map((r) => r.powerW).fold(0.0, (a, b) => a + b);
       final avgPower = totalPower / dayReadings.length;
       final dia = DateTime.parse(dayKey);
-      result.add(DailyStats(diaDia: dia.day, kwh: avgPower * 24 / 1000));
+      result.add(DailyStats(diaDia: dia.day, kwh: avgPower * 24 / 1000, date: dia));
     });
     return result..sort((a, b) => a.diaDia.compareTo(b.diaDia));
   }
@@ -762,7 +782,8 @@ class Reading {
 class DailyStats {
   final int diaDia;
   final double kwh;
-  DailyStats({required this.diaDia, required this.kwh});
+  final DateTime date;
+  DailyStats({required this.diaDia, required this.kwh, required this.date});
 }
 
 class DeviceStats {

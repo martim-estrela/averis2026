@@ -1,6 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+class DeviceAlreadyExistsException implements Exception {
+  final String existingDeviceId;
+  DeviceAlreadyExistsException(this.existingDeviceId);
+
+  @override
+  String toString() => 'Dispositivo já existe (id: $existingDeviceId)';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AVERIS – UserService
 //
@@ -164,14 +172,39 @@ class UserService {
 
   // ── Criar dispositivo ─────────────────────────────────────────────────────
 
-  /// Cria um novo dispositivo em users/{uid}/devices/{deviceId}
+  /// Verifica se já existe dispositivo com o mesmo MAC ou IP.
+  /// Retorna o deviceId existente, ou null se não existir.
+  static Future<String?> findExistingDevice({
+    required String uid,
+    required String ip,
+    String mac = '',
+  }) async {
+    final snap = await _devicesRef(uid).get();
+    for (final doc in snap.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final existingMac = data['mac'] as String? ?? '';
+      final existingIp = data['ip'] as String? ?? '';
+      if (mac.isNotEmpty && existingMac == mac) return doc.id;
+      if (existingIp == ip) return doc.id;
+    }
+    return null;
+  }
+
+  /// Cria um novo dispositivo em users/{uid}/devices/{deviceId}.
+  /// Lança [DeviceAlreadyExistsException] se já existir dispositivo com o mesmo IP ou MAC.
   static Future<String> addDevice({
     required String uid,
     required String name,
     required String ip,
     String mac = '',
     String type = 'shelly-plug',
+    bool online = false,
   }) async {
+    final existing = await findExistingDevice(uid: uid, ip: ip, mac: mac);
+    if (existing != null) {
+      throw DeviceAlreadyExistsException(existing);
+    }
+
     final devRef = _devicesRef(uid).doc();
 
     await devRef.set({
@@ -180,9 +213,9 @@ class UserService {
       'mac': mac,
       'status': 'off',
       'type': type,
-      'online': false,
+      'online': online,
       'createdAt': FieldValue.serverTimestamp(),
-      'lastSeenAt': null,
+      'lastSeenAt': online ? FieldValue.serverTimestamp() : null,
       'lastMetrics': {
         'powerW': 0.0,
         'totalKwh': 0.0,
@@ -193,6 +226,19 @@ class UserService {
     });
 
     return devRef.id;
+  }
+
+  /// Atualiza o IP de um dispositivo existente e marca-o como online.
+  static Future<void> updateDeviceIp({
+    required String uid,
+    required String deviceId,
+    required String ip,
+  }) async {
+    await _deviceRef(uid, deviceId).update({
+      'ip': ip,
+      'online': true,
+      'lastSeenAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // ── Gravar leitura do dispositivo ─────────────────────────────────────────

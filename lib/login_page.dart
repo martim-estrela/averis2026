@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'register_page.dart';
-import 'home_page.dart';
-import 'services/user_service.dart';
-import 'services/notification_service.dart';
-import 'services/background_service.dart';
-import 'services/shelly_polling_service.dart';
+import 'services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,6 +15,7 @@ class _LoginPageState extends State<LoginPage> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   String? _errorText;
 
   @override
@@ -28,6 +25,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // AuthGate ouve authStateChanges e trata da navegação — aqui só fazemos login.
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -37,27 +35,11 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text.trim(),
       );
-
-      final uid = cred.user!.uid;
-
-      // Garante que o documento existe (caso seja um utilizador antigo)
-      await UserService.ensureUserExists(cred.user!);
-
-      // Inicia notificações, background e polling
-      /*NotificationService.startListeners(uid);
-      await BackgroundService.start();*/
-      await ShellyPollingService.start(uid);
-
-      if (!mounted) return;
-
-      // Navega para o ecrã principal e remove o login da pilha
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
+      // AuthGate detecta a mudança de estado e navega automaticamente.
     } on FirebaseAuthException catch (e) {
       String message = 'Ocorreu um erro. Tente novamente.';
       switch (e.code) {
@@ -78,11 +60,28 @@ class _LoginPageState extends State<LoginPage> {
           message = 'Sem ligação à internet.';
           break;
       }
-      setState(() => _errorText = message);
+      if (mounted) setState(() => _errorText = message);
     } catch (_) {
-      setState(() => _errorText = 'Erro inesperado. Tente novamente.');
+      if (mounted) setState(() => _errorText = 'Erro inesperado. Tente novamente.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loginWithGoogle() async {
+    setState(() {
+      _isGoogleLoading = true;
+      _errorText = null;
+    });
+
+    try {
+      await AuthService.signInWithGoogle();
+      // AuthGate detecta a mudança de estado e navega automaticamente.
+    } catch (e) {
+      if (e.toString().contains('cancelled')) return;
+      if (mounted) setState(() => _errorText = 'Não foi possível entrar com o Google.');
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -105,14 +104,11 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-
       if (!mounted) return;
       _passwordCtrl.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Email de redefinição enviado! Verifique a sua caixa de entrada.',
-          ),
+          content: Text('Email de redefinição enviado! Verifique a sua caixa de entrada.'),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 4),
         ),
@@ -131,9 +127,7 @@ class _LoginPageState extends State<LoginPage> {
       }
       if (mounted) setState(() => _errorText = message);
     } catch (_) {
-      if (mounted) {
-        setState(() => _errorText = 'Erro inesperado. Tente novamente.');
-      }
+      if (mounted) setState(() => _errorText = 'Erro inesperado. Tente novamente.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -202,7 +196,6 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                     const SizedBox(height: 16),
-
                     Text('Password', style: theme.textTheme.bodyMedium),
                     UnderlineInput(
                       controller: _passwordCtrl,
@@ -227,10 +220,7 @@ class _LoginPageState extends State<LoginPage> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: _isLoading ? null : _resetPassword,
-                  child: const Text(
-                    'Esqueceu a sua password?',
-                    style: TextStyle(fontSize: 13),
-                  ),
+                  child: const Text('Esqueceu a sua password?', style: TextStyle(fontSize: 13)),
                 ),
               ),
 
@@ -252,10 +242,11 @@ class _LoginPageState extends State<LoginPage> {
 
               const SizedBox(height: 16),
 
+              // Botão principal: entrar com email
               SizedBox(
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _login,
+                  onPressed: (_isLoading || _isGoogleLoading) ? null : _login,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     shape: RoundedRectangleBorder(
@@ -266,14 +257,52 @@ class _LoginPageState extends State<LoginPage> {
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text(
-                          'Entrar',
-                          style: TextStyle(color: Colors.white),
+                      : const Text('Entrar', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Divisor
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('ou', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Botão Google
+              SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: (_isLoading || _isGoogleLoading) ? null : _loginWithGoogle,
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  child: _isGoogleLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            GoogleIcon(),
+                            SizedBox(width: 10),
+                            Text('Continuar com Google'),
+                          ],
                         ),
                 ),
               ),
@@ -301,7 +330,37 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UnderlineInput — campo de texto com borda inferior
+// GoogleIcon — "G" do Google desenhado com Flutter puro, sem assets
+// ─────────────────────────────────────────────────────────────────────────────
+
+class GoogleIcon extends StatelessWidget {
+  const GoogleIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFFDDDDDD)),
+        color: Colors.white,
+      ),
+      alignment: Alignment.center,
+      child: const Text(
+        'G',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF4285F4),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UnderlineInput
 // ─────────────────────────────────────────────────────────────────────────────
 
 class UnderlineInput extends StatelessWidget {

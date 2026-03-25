@@ -43,10 +43,14 @@ dependencies:
   pdf: ^3.10.8
   printing: ^5.13.1
   wifi_iot: ^0.3.19
+  wifi_scan: ^0.4.1
   permission_handler: ^11.3.0
   flutter_local_notifications: ^17.0.0
   flutter_background_service: ^5.0.5
   connectivity_plus: ^6.0.0
+  google_sign_in: ^6.2.2
+  otp: ^3.1.4
+  qr_flutter: ^4.1.0
 
 
 dev_dependencies:

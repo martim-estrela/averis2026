@@ -24,9 +24,6 @@ class ShellyProvisioningService {
     final body = jsonEncode({
       "config": {
         "sta": {"ssid": ssid, "pass": password, "enable": true},
-        "ap": {
-          "enable": false, // Desliga o AP depois de configurado
-        },
       },
     });
 
@@ -60,10 +57,12 @@ class ShellyProvisioningService {
             .timeout(const Duration(milliseconds: 800));
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
-          // Se temos o MAC esperado, verificamos
-          if (expectedMac == null || data['mac'] == expectedMac) {
-            return ip;
-          }
+          if (expectedMac == null) return ip;
+          // Normalizar ambos os MACs antes de comparar (remove separadores, maiúsculas)
+          final foundMac = (data['mac'] as String? ?? '')
+              .replaceAll(RegExp(r'[^a-fA-F0-9]'), '')
+              .toUpperCase();
+          if (foundMac == expectedMac) return ip;
         }
       } catch (_) {}
       return null;

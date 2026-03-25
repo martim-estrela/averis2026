@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter pub:*)",
+      "Bash(find 'c:\\\\Users\\\\marti\\\\OneDrive\\\\Ambiente de Trabalho\\\\averis\\\\lib' -type f \\\\\\(-name *auth* -o -name *login* -o -name *register* -o -name main.dart \\\\\\))",
+      "Bash(curl -s -o \"c:/Users/marti/OneDrive/Ambiente de Trabalho/averis/assets/google_logo.png\" \"https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(flutter analyze:*)",
+      "Bash(keytool -list -v -keystore \"%USERPROFILE%\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android)",
+      "Bash(keytool -list -v -keystore \"/c/Users/marti/.android/debug.keystore\" -alias androiddebugkey -storepass android -keypass android)"
+    ]
+  }
+}

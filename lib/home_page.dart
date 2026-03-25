@@ -6,8 +6,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'profile_page.dart';
 import 'devices_page.dart';
 import 'historic_page.dart';
+import 'services/gamification_service.dart';
 import 'services/shelly_api.dart';
 import 'services/shelly_polling_service.dart';
+import 'services/smart_plug_service.dart';
 import 'services/user_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -90,10 +92,10 @@ class _DashboardViewState extends State<_DashboardView> {
     }
 
     return StreamBuilder<QuerySnapshot>(
-      // ✅ Coleção raiz 'devices' filtrada por userId
       stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
           .collection('devices')
-          .where('userId', isEqualTo: userId)
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
@@ -135,6 +137,7 @@ class _DashboardViewState extends State<_DashboardView> {
         );
         final deviceData = selectedDevice.data();
         final ip = (deviceData['ip'] as String?) ?? '';
+        final deviceType = (deviceData['type'] as String?) ?? 'shelly-plug';
 
         return Column(
           children: [
@@ -145,7 +148,6 @@ class _DashboardViewState extends State<_DashboardView> {
                   labelText: 'Dispositivo',
                   border: OutlineInputBorder(),
                 ),
-                // ✅ 'value' em vez de 'initialValue' (que não existe)
                 initialValue: _selectedDeviceId ?? docList.first.id,
                 items: devices.map((doc) {
                   final data = doc.data() as Map<String, dynamic>;
@@ -178,6 +180,7 @@ class _DashboardViewState extends State<_DashboardView> {
                 deviceId: selectedDevice.id,
                 shellyIp: ip,
                 userId: userId,
+                deviceType: deviceType,
               ),
             ),
 
@@ -198,11 +201,13 @@ class _LiveMetricsCard extends StatefulWidget {
   final String deviceId;
   final String userId;
   final String shellyIp;
+  final String deviceType;
 
   const _LiveMetricsCard({
     required this.deviceId,
     required this.userId,
     required this.shellyIp,
+    required this.deviceType,
   });
 
   @override
@@ -213,18 +218,22 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
   ShellyMetrics _metrics = ShellyMetrics.empty();
   Timer? _timer;
   int _lastFirestoreWrite = 0;
-  double _energyPrice = 0.22; // valor por omissão até ler do Firestore
+  double _energyPrice = 0.22;
+  int _streakDias = 0;
+  bool _isOnline = false;
+  bool _isToggling = false;
 
   @override
   void initState() {
     super.initState();
-    _loadEnergyPrice();
+    _loadUserData();
     _fetchLive();
     _timer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchLive());
+    // Processar gamificação diária (só executa uma vez por dia)
+    GamificationService.processDailyForUser(widget.userId);
   }
 
-  // ✅ Lê o preço de energia das definições do utilizador
-  Future<void> _loadEnergyPrice() async {
+  Future<void> _loadUserData() async {
     final snap = await FirebaseFirestore.instance
         .collection('users')
         .doc(widget.userId)
@@ -232,7 +241,13 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
     final data = snap.data();
     final price =
         (data?['settings']?['energyPrice'] as num?)?.toDouble() ?? 0.22;
-    if (mounted) setState(() => _energyPrice = price);
+    final streak = (data?['streakDias'] as num?)?.toInt() ?? 0;
+    if (mounted) {
+      setState(() {
+        _energyPrice = price;
+        _streakDias = streak;
+      });
+    }
   }
 
   Future<void> _fetchLive() async {
@@ -240,9 +255,11 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
     try {
       final newMetrics = await ShellyApi.getMetrics(widget.shellyIp);
       if (!mounted) return;
-      setState(() => _metrics = newMetrics);
+      setState(() {
+        _metrics = newMetrics;
+        _isOnline = true;
+      });
 
-      // ✅ Grava no Firestore a cada 30s usando UserService (caminho correto)
       final now = DateTime.now().millisecondsSinceEpoch;
       if (now - _lastFirestoreWrite > 30000) {
         _lastFirestoreWrite = now;
@@ -257,8 +274,26 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
         );
       }
     } catch (_) {
-      // Shelly sem resposta — não faz nada, o ShellyPollingService
-      // trata de marcar o dispositivo como offline
+      if (mounted) setState(() => _isOnline = false);
+    }
+  }
+
+  Future<void> _toggle() async {
+    if (_isToggling || !_isOnline) return;
+    setState(() => _isToggling = true);
+    try {
+      await SmartPlugService.toggle(
+        widget.userId,
+        widget.deviceId,
+        widget.shellyIp,
+        widget.deviceType,
+        !_metrics.isOn,
+      );
+      // +2 XP por interagir com o dispositivo via app
+      GamificationService.awardActionPoints(uid: widget.userId, points: 2);
+      await _fetchLive();
+    } finally {
+      if (mounted) setState(() => _isToggling = false);
     }
   }
 
@@ -271,19 +306,90 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
   @override
   Widget build(BuildContext context) {
     final todayKwh = _metrics.totalKwh.clamp(0.0, double.infinity);
-    final cost = todayKwh * _energyPrice; // ✅ usa preço do utilizador
+    final cost = todayKwh * _energyPrice;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          Text(
-            'Dashboard',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          // Título + badge online/offline
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Dashboard',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _isOnline
+                      ? Colors.green.withValues(alpha: 0.15)
+                      : Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _isOnline ? Colors.green : Colors.red,
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: _isOnline ? Colors.green : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      _isOnline ? 'Online' : 'Offline',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _isOnline ? Colors.green[700] : Colors.red[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
+
+          // Banner de streak (só aparece quando streak >= 2)
+          if (_streakDias >= 2) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Text('🔥', style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$_streakDias dias consecutivos abaixo da média!',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.deepOrange,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           Row(
             children: [
@@ -340,10 +446,33 @@ class _LiveMetricsCardState extends State<_LiveMetricsCard> {
             '${_metrics.totalKwh.toStringAsFixed(2)} kWh',
             Icons.electrical_services,
           ),
-          _DetailRow(
-            'Estado',
-            _metrics.isOn ? 'Ligado' : 'Desligado',
-            Icons.power,
+          const SizedBox(height: 16),
+
+          // Botão ligar/desligar
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isOnline && !_isToggling ? _toggle : null,
+              icon: _isToggling
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(_metrics.isOn ? Icons.power_off : Icons.power),
+              label: Text(_metrics.isOn ? 'Desligar' : 'Ligar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _metrics.isOn ? Colors.red[400] : Colors.green[500],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -363,8 +492,9 @@ class _ReadingsChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      // ✅ Caminho correto: devices/{deviceId}/readings
       stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
           .collection('devices')
           .doc(deviceId)
           .collection('readings')

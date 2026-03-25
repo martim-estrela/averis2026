@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'mfa_setup_page.dart';
 import 'services/notification_service.dart';
-import 'services/background_service.dart';
 import 'services/shelly_polling_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -209,6 +209,43 @@ class _SettingsPageState extends State<SettingsPage> {
                           .update({'settings.notifications': map});
                       NotificationService.startListeners(uid);
                     },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── Segurança ─────────────────────────────────────────
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Segurança',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Protege a tua conta com verificação em dois passos.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const MfaSetupPage(),
+                                ),
+                              ),
+                              icon: const Icon(Icons.shield_outlined),
+                              label: const Text('Verificação em dois passos'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
 

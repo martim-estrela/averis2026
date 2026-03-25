@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:wifi_iot/wifi_iot.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'services/shelly_provisioning_service.dart';
+import 'services/user_service.dart';
 
 enum ProvisioningStep {
   selectNetwork, // Utilizador seleciona o AP do Shelly
@@ -36,6 +38,7 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
   String? _discoveredIp;
   String? _deviceMac;
   String? _deviceModel;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -87,6 +90,9 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
 
       await Future.delayed(const Duration(seconds: 2));
 
+      // Forçar tráfego pela rede do Shelly (Android 10+ ignora redes sem internet)
+      await WiFiForIoTPlugin.forceWifiUsage(true);
+
       // Obter info do dispositivo
       setState(() => _statusMessage = 'A identificar dispositivo...');
       final info = await ShellyProvisioningService.getDeviceInfo();
@@ -99,6 +105,7 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
         _statusMessage = 'Dispositivo: ${info['model']} (${info['mac']})';
       });
     } catch (e) {
+      await WiFiForIoTPlugin.forceWifiUsage(false);
       setState(() {
         _step = ProvisioningStep.error;
         _error = 'Erro ao ligar ao Shelly: $e';
@@ -135,6 +142,8 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
             'A reconectar à tua rede e a descobrir o IP do Shelly...';
       });
 
+      // Restaurar comportamento normal de rede
+      await WiFiForIoTPlugin.forceWifiUsage(false);
       await WiFiForIoTPlugin.disconnect();
       await Future.delayed(const Duration(seconds: 3));
 
@@ -160,6 +169,7 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
         _statusMessage = '✅ Shelly configurado com sucesso!';
       });
     } catch (e) {
+      await WiFiForIoTPlugin.forceWifiUsage(false);
       setState(() {
         _step = ProvisioningStep.error;
         _error = 'Erro durante provisioning: $e';
@@ -313,6 +323,38 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
     );
   }
 
+  Future<void> _saveAndFinish() async {
+    setState(() => _isSaving = true);
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      await UserService.addDevice(
+        uid: uid,
+        name: _deviceModel ?? 'Shelly',
+        ip: _discoveredIp!,
+        mac: _deviceMac ?? '',
+        type: 'shelly-plug',
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on DeviceAlreadyExistsException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Dispositivo já existe na app.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      Navigator.of(context).pop(false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao guardar: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Widget _buildDone() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -327,19 +369,21 @@ class _ShellyProvisioningPageState extends State<ShellyProvisioningPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          'IP: $_discoveredIp',
+          'IP: $_discoveredIp\nModelo: $_deviceModel',
           style: const TextStyle(fontSize: 16),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
         ElevatedButton.icon(
-          onPressed: () => Navigator.of(context).pop({
-            'ip': _discoveredIp,
-            'mac': _deviceMac,
-            'model': _deviceModel,
-          }),
-          icon: const Icon(Icons.add),
-          label: const Text('Adicionar à app'),
+          onPressed: _isSaving ? null : _saveAndFinish,
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.check),
+          label: Text(_isSaving ? 'A guardar...' : 'Adicionar à app'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green,
             foregroundColor: Colors.white,

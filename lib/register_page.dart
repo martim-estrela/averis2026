@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'login_page.dart' show GoogleIcon;
+import 'services/auth_service.dart';
 import 'services/user_service.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -15,6 +17,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _nameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   String? _errorText;
 
   @override
@@ -55,7 +58,7 @@ class _RegisterPageState extends State<RegisterPage> {
       await cred.user?.sendEmailVerification();
 
       if (!mounted) return;
-      Navigator.of(context).pop(); // volta ao login
+      Navigator.of(context).pop();
     } on FirebaseAuthException catch (e) {
       String message = 'Ocorreu um erro ao criar a conta.';
       switch (e.code) {
@@ -77,6 +80,23 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => _errorText = 'Erro inesperado. Tente novamente.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _registerWithGoogle() async {
+    setState(() {
+      _isGoogleLoading = true;
+      _errorText = null;
+    });
+    try {
+      await AuthService.signInWithGoogle();
+      // AuthGate trata da navegação automaticamente.
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (e.toString().contains('cancelled')) return;
+      if (mounted) setState(() => _errorText = 'Não foi possível entrar com o Google.');
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -224,6 +244,50 @@ class _RegisterPageState extends State<RegisterPage> {
                       : const Text(
                           'Criar Conta',
                           style: TextStyle(color: Colors.white),
+                        ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Divisor
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('ou', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Botão Google
+              SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: (_isLoading || _isGoogleLoading) ? null : _registerWithGoogle,
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  child: _isGoogleLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            GoogleIcon(),
+                            SizedBox(width: 10),
+                            Text('Continuar com Google'),
+                          ],
                         ),
                 ),
               ),
