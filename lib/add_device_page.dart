@@ -18,7 +18,7 @@ class _FoundDevice {
   final String displayName;
   final _DeviceMode mode;
   final String? ssid; // factory mode
-  final String? ip;   // network mode
+  final String? ip; // network mode
 
   const _FoundDevice({
     required this.displayName,
@@ -69,16 +69,19 @@ class _AddDevicePageState extends State<AddDevicePage> {
         await WiFiScan.instance.startScan();
       }
       final results = await WiFiScan.instance.getScannedResults();
-      final shellyNets =
-          results.where((ap) => ap.ssid.startsWith('Shelly')).toList();
+      final shellyNets = results
+          .where((ap) => ap.ssid.startsWith('Shelly'))
+          .toList();
       if (mounted) {
         setState(() {
           _factoryDevices = shellyNets
-              .map((ap) => _FoundDevice(
-                    displayName: ap.ssid,
-                    mode: _DeviceMode.factory,
-                    ssid: ap.ssid,
-                  ))
+              .map(
+                (ap) => _FoundDevice(
+                  displayName: ap.ssid,
+                  mode: _DeviceMode.factory,
+                  ssid: ap.ssid,
+                ),
+              )
               .toList();
         });
       }
@@ -113,7 +116,8 @@ class _AddDevicePageState extends State<AddDevicePage> {
       final results = await Future.wait(futures);
       if (mounted) {
         setState(
-            () => _networkDevices = results.whereType<_FoundDevice>().toList());
+          () => _networkDevices = results.whereType<_FoundDevice>().toList(),
+        );
       }
     } catch (_) {}
   }
@@ -148,7 +152,8 @@ class _AddDevicePageState extends State<AddDevicePage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                  'Insere as credenciais do teu WiFi de casa para configurar o Shelly.'),
+                'Insere as credenciais do teu WiFi de casa para configurar o Shelly.',
+              ),
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(8),
@@ -189,7 +194,8 @@ class _AddDevicePageState extends State<AddDevicePage> {
                   prefixIcon: const Icon(Icons.lock),
                   suffixIcon: IconButton(
                     icon: Icon(
-                        obscure ? Icons.visibility : Icons.visibility_off),
+                      obscure ? Icons.visibility : Icons.visibility_off,
+                    ),
                     onPressed: () => setSt(() => obscure = !obscure),
                   ),
                 ),
@@ -198,8 +204,9 @@ class _AddDevicePageState extends State<AddDevicePage> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancelar')),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (ssidCtrl.text.trim().isNotEmpty) {
@@ -215,7 +222,10 @@ class _AddDevicePageState extends State<AddDevicePage> {
   }
 
   Future<void> _runProvisioning(
-      _FoundDevice device, String ssid, String password) async {
+    _FoundDevice device,
+    String ssid,
+    String password,
+  ) async {
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -248,8 +258,10 @@ class _AddDevicePageState extends State<AddDevicePage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('IP: ${device.ip}',
-                style: const TextStyle(color: Colors.grey)),
+            Text(
+              'IP: ${device.ip}',
+              style: const TextStyle(color: Colors.grey),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: nameCtrl,
@@ -263,11 +275,13 @@ class _AddDevicePageState extends State<AddDevicePage> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
           ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Adicionar')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Adicionar'),
+          ),
         ],
       ),
     );
@@ -277,26 +291,32 @@ class _AddDevicePageState extends State<AddDevicePage> {
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       await UserService.addDevice(
-          uid: uid, name: nameCtrl.text.trim(), ip: device.ip!);
+        uid: uid,
+        name: nameCtrl.text.trim(),
+        ip: device.ip!,
+      );
       GamificationService.awardActionPoints(uid: uid, points: 5);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('✅ Dispositivo adicionado!'),
-            backgroundColor: Colors.green),
+          content: Text('Dispositivo adicionado!'),
+          backgroundColor: Colors.green,
+        ),
       );
       Navigator.of(context).pop();
     } on DeviceAlreadyExistsException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('⚠️ Dispositivo já existe na app.'),
-            backgroundColor: Colors.orange),
+          content: Text('Dispositivo já existe na app.'),
+          backgroundColor: Colors.orange,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Erro: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erro: $e')));
     }
   }
 
@@ -321,8 +341,9 @@ class _AddDevicePageState extends State<AddDevicePage> {
             const SizedBox(height: 12),
             TextField(
               controller: ipCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Endereço IP *',
                 hintText: '192.168.1.10',
@@ -334,8 +355,9 @@ class _AddDevicePageState extends State<AddDevicePage> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
           ElevatedButton(
             onPressed: () {
               if (nameCtrl.text.trim().isNotEmpty &&
@@ -354,26 +376,32 @@ class _AddDevicePageState extends State<AddDevicePage> {
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       await UserService.addDevice(
-          uid: uid, name: nameCtrl.text.trim(), ip: ipCtrl.text.trim());
+        uid: uid,
+        name: nameCtrl.text.trim(),
+        ip: ipCtrl.text.trim(),
+      );
       GamificationService.awardActionPoints(uid: uid, points: 5);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('✅ Dispositivo adicionado!'),
-            backgroundColor: Colors.green),
+          content: Text('✅ Dispositivo adicionado!'),
+          backgroundColor: Colors.green,
+        ),
       );
       Navigator.of(context).pop();
     } on DeviceAlreadyExistsException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('⚠️ Dispositivo já existe na app.'),
-            backgroundColor: Colors.orange),
+          content: Text('Dispositivo já existe na app.'),
+          backgroundColor: Colors.orange,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Erro: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erro: $e')));
     }
   }
 
@@ -422,13 +450,17 @@ class _AddDevicePageState extends State<AddDevicePage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.devices_other,
-                          size: 64, color: Colors.grey[400]),
+                      Icon(
+                        Icons.devices_other,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         'Nenhum dispositivo encontrado',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(color: Colors.grey),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.grey,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       const Text(
@@ -492,8 +524,10 @@ class _AddDevicePageState extends State<AddDevicePage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                         SizedBox(width: 8),
-                        Text('A continuar a procura...',
-                            style: TextStyle(color: Colors.grey)),
+                        Text(
+                          'A continuar a procura...',
+                          style: TextStyle(color: Colors.grey),
+                        ),
                       ],
                     ),
                   ),
@@ -542,12 +576,14 @@ class _SectionHeader extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold, color: color)),
-              Text(subtitle,
-                  style:
-                      const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                label,
+                style: TextStyle(fontWeight: FontWeight.bold, color: color),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
             ],
           ),
         ],
@@ -567,8 +603,9 @@ class _DeviceTile extends StatelessWidget {
     final isFactory = device.mode == _DeviceMode.factory;
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor:
-            isFactory ? Colors.orange.shade50 : Colors.green.shade50,
+        backgroundColor: isFactory
+            ? Colors.orange.shade50
+            : Colors.green.shade50,
         child: Icon(
           isFactory ? Icons.settings_remote : Icons.power,
           color: isFactory ? Colors.orange : Colors.green,
@@ -628,15 +665,15 @@ class _ProvisioningDialogState extends State<_ProvisioningDialog> {
   ];
 
   static String _label(_ProvStep s) => switch (s) {
-        _ProvStep.connecting => 'Ligar ao Shelly',
-        _ProvStep.identifying => 'Identificar dispositivo',
-        _ProvStep.configuringWifi => 'Configurar WiFi',
-        _ProvStep.rebooting => 'Aguardar reboot (~25s)',
-        _ProvStep.discovering => 'Descobrir IP na rede',
-        _ProvStep.saving => 'Guardar na app',
-        _ProvStep.done => 'Concluído',
-        _ProvStep.error => '',
-      };
+    _ProvStep.connecting => 'Ligar ao Shelly',
+    _ProvStep.identifying => 'Identificar dispositivo',
+    _ProvStep.configuringWifi => 'Configurar WiFi',
+    _ProvStep.rebooting => 'Aguardar reboot (~25s)',
+    _ProvStep.discovering => 'Descobrir IP na rede',
+    _ProvStep.saving => 'Guardar na app',
+    _ProvStep.done => 'Concluído',
+    _ProvStep.error => '',
+  };
 
   /// Normaliza MAC para comparação: remove separadores e converte para maiúsculas.
   /// Ex: "aa:bb:cc:dd:ee:ff" → "AABBCCDDEEFF"
@@ -705,7 +742,9 @@ class _ProvisioningDialogState extends State<_ProvisioningDialog> {
         await Future.delayed(const Duration(seconds: 3));
       }
       if (subnet == null) {
-        throw Exception('Telemóvel não voltou ao WiFi de casa. Verifica a ligação.');
+        throw Exception(
+          'Telemóvel não voltou ao WiFi de casa. Verifica a ligação.',
+        );
       }
 
       // Tentar descobrir o Shelly até 3 vezes (a cada 10s)
@@ -778,9 +817,11 @@ class _ProvisioningDialogState extends State<_ProvisioningDialog> {
               children: [
                 const Icon(Icons.error_outline, color: Colors.red, size: 48),
                 const SizedBox(height: 12),
-                Text(_error ?? 'Erro desconhecido',
-                    style: const TextStyle(color: Colors.red),
-                    textAlign: TextAlign.center),
+                Text(
+                  _error ?? 'Erro desconhecido',
+                  style: const TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
               ],
             )
           : Column(
@@ -798,13 +839,18 @@ class _ProvisioningDialogState extends State<_ProvisioningDialog> {
                         width: 24,
                         height: 24,
                         child: isDone
-                            ? const Icon(Icons.check_circle,
-                                color: Colors.green, size: 20)
+                            ? const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                                size: 20,
+                              )
                             : isCurrent
-                                ? const CircularProgressIndicator(
-                                    strokeWidth: 2)
-                                : const Icon(Icons.radio_button_unchecked,
-                                    color: Colors.grey, size: 20),
+                            ? const CircularProgressIndicator(strokeWidth: 2)
+                            : const Icon(
+                                Icons.radio_button_unchecked,
+                                color: Colors.grey,
+                                size: 20,
+                              ),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -813,10 +859,9 @@ class _ProvisioningDialogState extends State<_ProvisioningDialog> {
                           color: isDone
                               ? Colors.green
                               : isCurrent
-                                  ? null
-                                  : Colors.grey,
-                          fontWeight:
-                              isCurrent ? FontWeight.bold : null,
+                              ? null
+                              : Colors.grey,
+                          fontWeight: isCurrent ? FontWeight.bold : null,
                         ),
                       ),
                     ],

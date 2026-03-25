@@ -41,7 +41,7 @@ class _AutoDetectPageState extends State<AutoDetectPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ Barra de progresso real durante o scan
+            // Barra de progresso real durante o scan
             LinearProgressIndicator(
               value: _isScanning ? (_scanned / _totalIps).clamp(0.0, 1.0) : 0,
               backgroundColor: Colors.grey[300],
