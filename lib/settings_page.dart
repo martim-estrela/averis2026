@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'mfa_setup_page.dart';
-import 'services/notification_service.dart';
 import 'services/shelly_polling_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -207,7 +206,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           .collection('users')
                           .doc(uid)
                           .update({'settings.notifications': map});
-                      NotificationService.startListeners(uid);
                     },
                   ),
                   const SizedBox(height: 24),

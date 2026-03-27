@@ -1,0 +1,17 @@
+name = "averis-notifier"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+workers_dev = false
+preview_urls = false
+
+# Corre a cada 5 minutos — dentro do tier gratuito do Cloudflare
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Variáveis não-sensíveis (project_id é público)
+[vars]
+FIREBASE_PROJECT_ID = "averis-de30e"
+
+# Variáveis sensíveis — NÃO colocar aqui.
+# Definir via: wrangler secret put FIREBASE_CLIENT_EMAIL
+#              wrangler secret put FIREBASE_PRIVATE_KEY

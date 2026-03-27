@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'login_page.dart';
 import 'home_page.dart';
 import 'mfa_verify_page.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 import 'services/shelly_polling_service.dart';
 import 'services/user_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await NotificationService.init();
   runApp(const MyApp());
 }
 
@@ -54,6 +58,20 @@ class _AuthGateState extends State<AuthGate> {
   void initState() {
     super.initState();
     FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
+    _setupFcmTokenRefresh();
+  }
+
+  // Atualiza o token FCM no Firestore sempre que o FCM o renovar
+  void _setupFcmTokenRefresh() {
+    FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .update({'fcmToken': token});
+      }
+    });
   }
 
   Future<void> _onAuthChanged(User? user) async {
@@ -94,6 +112,16 @@ class _AuthGateState extends State<AuthGate> {
     _mfaVerifiedUid = user.uid;
     await UserService.ensureUserExists(user);
     await ShellyPollingService.start(user.uid);
+
+    // Guarda o token FCM no Firestore para o Cloudflare Worker poder enviar notificações
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({'fcmToken': token});
+    }
+
     if (mounted) setState(() => _state = _AuthState.authenticated);
   }
 
