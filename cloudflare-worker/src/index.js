@@ -343,6 +343,29 @@ async function processUser(userDoc, token, projectId) {
     newState.lastLevel = currentLevel;
   }
 
+  // ── Conquistas ───────────────────────────────────────────────────────────
+  if (notifSettings.achievements !== false) {
+    const ACHIEVEMENT_LABELS = {
+      firstSaving:            { title: '🏅 Primeira poupança!',     body: 'Poupaste energia pela primeira vez. Bom começo!' },
+      savedInWeekend:         { title: '🌅 Poupança ao fim de semana!', body: 'Conseguiste poupar energia num fim de semana. Ótimo!' },
+      streak3Days:            { title: '🔥 3 dias seguidos!',        body: 'Poupaste energia 3 dias consecutivos. Continua assim!' },
+      sevenDaysBelowAverage:  { title: '🔥 7 dias seguidos!',        body: 'Uma semana inteira a poupar energia. Incrível!' },
+      reachedLevel3:          { title: '⭐ Nível 3 atingido!',        body: 'Subiste ao nível 3. Estás a ficar cada vez melhor!' },
+      reachedLevel5:          { title: '⭐ Nível 5 atingido!',        body: 'Subiste ao nível 5. És um mestre da poupança!' },
+    };
+
+    const currentAchievements = data.achievements ?? {};
+    const lastAchievements = prevState.lastAchievements ?? {};
+
+    for (const [key, label] of Object.entries(ACHIEVEMENT_LABELS)) {
+      if (currentAchievements[key] === true && lastAchievements[key] !== true) {
+        notifications.push(label);
+      }
+    }
+
+    newState.lastAchievements = { ...lastAchievements, ...currentAchievements };
+  }
+
   // ── Dispositivos offline ─────────────────────────────────────────────────
   if (notifSettings.deviceOffline === true) {
     const lastDeviceStates = prevState.deviceStates ?? {};
