@@ -1,37 +1,54 @@
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'shelly_cloud_service.dart';
 
 class SmartPlugService {
   SmartPlugService._();
 
-  /// Toggle on/off — requer uid e deviceId para atualizar o caminho correto
+  /// Toggle on/off com fallback para Shelly Cloud se a rede local falhar.
   static Future<bool> toggle(
     String uid,
     String deviceId,
     String deviceIp,
     String deviceType,
-    bool turnOn,
-  ) async {
+    bool turnOn, {
+    String? cloudServerUri,
+    String? cloudAuthKey,
+    String? shellyCloudId,
+  }) async {
     try {
-      bool success;
+      bool success = false;
 
-      switch (deviceType.toLowerCase()) {
-        case 'shelly':
-        case 'shelly-plug':
-          success = await _toggleShelly(deviceIp, turnOn);
-          break;
-        case 'tplink':
-          success = await _toggleTPLink(deviceIp, turnOn);
-          break;
-        case 'sonoff':
-          success = await _toggleSonoff(deviceIp, turnOn);
-          break;
-        default:
-          success = await _toggleShelly(deviceIp, turnOn);
+      // 1. Tentar rede local
+      try {
+        switch (deviceType.toLowerCase()) {
+          case 'shelly':
+          case 'shelly-plug':
+            success = await _toggleShelly(deviceIp, turnOn);
+            break;
+          case 'tplink':
+            success = await _toggleTPLink(deviceIp, turnOn);
+            break;
+          case 'sonoff':
+            success = await _toggleSonoff(deviceIp, turnOn);
+            break;
+          default:
+            success = await _toggleShelly(deviceIp, turnOn);
+        }
+      } catch (_) {
+        // local falhou — tentar cloud
+      }
+
+      // 2. Fallback para Shelly Cloud
+      if (!success &&
+          cloudServerUri != null &&
+          cloudAuthKey != null &&
+          shellyCloudId != null) {
+        success = await ShellyCloudService.setRelay(
+            cloudServerUri, cloudAuthKey, shellyCloudId, turnOn);
       }
 
       if (success) {
-        // ✅ users/{uid}/devices/{deviceId}
         await FirebaseFirestore.instance
             .collection('users')
             .doc(uid)

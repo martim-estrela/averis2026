@@ -143,6 +143,7 @@ class UserService {
     String mac = '',
     String type = 'shelly-plug',
     bool online = false,
+    String? iconColor,
   }) async {
     final existing = await findExistingDevice(uid: uid, ip: ip, mac: mac);
     if (existing != null) {
@@ -151,7 +152,7 @@ class UserService {
 
     final devRef = _devicesRef(uid).doc();
 
-    await devRef.set({
+    final data = <String, dynamic>{
       'name': name,
       'ip': ip,
       'mac': mac,
@@ -167,7 +168,10 @@ class UserService {
         'currentMa': 0.0,
         'timestamp': FieldValue.serverTimestamp(),
       },
-    });
+    };
+    if (iconColor != null) data['iconColor'] = iconColor;
+
+    await devRef.set(data);
 
     return devRef.id;
   }

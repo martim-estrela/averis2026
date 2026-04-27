@@ -7,7 +7,12 @@
       "Bash(echo \"exit: $?\")",
       "Bash(flutter analyze:*)",
       "Bash(keytool -list -v -keystore \"%USERPROFILE%\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android)",
-      "Bash(keytool -list -v -keystore \"/c/Users/marti/.android/debug.keystore\" -alias androiddebugkey -storepass android -keypass android)"
+      "Bash(keytool -list -v -keystore \"/c/Users/marti/.android/debug.keystore\" -alias androiddebugkey -storepass android -keypass android)",
+      "Read(//c/Users/marti/OneDScene de Trabalho/averis/lib/services/**)",
+      "WebSearch",
+      "WebFetch(domain:shelly.cloud)",
+      "WebFetch(domain:shelly-api-docs.shelly.cloud)",
+      "Read(//c/Users/marti/AppData/Local/Pub/Cache/hosted/pub.dev/**)"
     ]
   }
 }

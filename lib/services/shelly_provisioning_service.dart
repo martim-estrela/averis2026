@@ -54,7 +54,7 @@ class ShellyProvisioningService {
         final uri = Uri.parse('http://$ip/rpc/Shelly.GetDeviceInfo');
         final res = await http
             .get(uri)
-            .timeout(const Duration(milliseconds: 800));
+            .timeout(const Duration(milliseconds: 1200));
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
           if (expectedMac == null) return ip;

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'notif_repository.dart';
 
 class GamificationService {
   GamificationService._();
@@ -138,6 +139,39 @@ class GamificationService {
     updates.addAll(achievementUpdates);
 
     await userRef.update(updates);
+
+    // Notificação de level-up
+    if (novoNivel > nivelAtual) {
+      await NotifRepository.write(
+        uid: uid,
+        type: 'level_up',
+        title: 'Subiste de nível!',
+        body: 'Parabéns! Atingiste o nível $novoNivel.',
+        metadata: {'nivel': novoNivel},
+      );
+    }
+
+    // Notificações de conquistas desbloqueadas
+    const achievementLabels = <String, String>{
+      'achievements.firstSaving': 'Primeira Poupança',
+      'achievements.reachedLevel3': 'Nível 3 Atingido',
+      'achievements.reachedLevel5': 'Nível 5 Atingido',
+      'achievements.savedInWeekend': 'Poupança ao Fim de Semana',
+      'achievements.streak3Days': '3 Dias Seguidos',
+      'achievements.sevenDaysBelowAverage': '7 Dias Abaixo da Média',
+    };
+    for (final key in achievementUpdates.keys) {
+      final label = achievementLabels[key];
+      if (label != null) {
+        await NotifRepository.write(
+          uid: uid,
+          type: 'achievement',
+          title: 'Conquista desbloqueada!',
+          body: label,
+          metadata: {'achievement': key.replaceFirst('achievements.', '')},
+        );
+      }
+    }
   }
 
   // ── Pontos por ação imediata (toggle, adicionar dispositivo, etc.) ─────────

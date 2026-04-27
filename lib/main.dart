@@ -7,8 +7,10 @@ import 'firebase_options.dart';
 import 'login_page.dart';
 import 'home_page.dart';
 import 'mfa_verify_page.dart';
+import 'onboarding_page.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
+import 'services/prefs_service.dart';
 import 'services/shelly_polling_service.dart';
 import 'services/user_service.dart';
 
@@ -30,6 +32,40 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF38A3F1)),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          shadowColor: Colors.black.withValues(alpha: 0.05),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            side: BorderSide(color: Colors.grey.shade300),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          isDense: true,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
       ),
       home: const AuthGate(),
     );
@@ -40,7 +76,7 @@ class MyApp extends StatelessWidget {
 // AuthGate — máquina de estados de autenticação + MFA
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _AuthState { loading, unauthenticated, mfaPending, authenticated }
+enum _AuthState { loading, unauthenticated, mfaPending, authenticated, onboarding }
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -122,7 +158,11 @@ class _AuthGateState extends State<AuthGate> {
           .update({'fcmToken': token});
     }
 
-    if (mounted) setState(() => _state = _AuthState.authenticated);
+    if (!mounted) return;
+    final onboardingDone = await PrefsService.isOnboardingDone();
+    if (!mounted) return;
+    setState(() => _state =
+        onboardingDone ? _AuthState.authenticated : _AuthState.onboarding);
   }
 
   Future<void> _onMfaVerified() async {
@@ -150,6 +190,8 @@ class _AuthGateState extends State<AuthGate> {
         );
       case _AuthState.authenticated:
         return const HomePage();
+      case _AuthState.onboarding:
+        return const OnboardingPage();
     }
   }
 }

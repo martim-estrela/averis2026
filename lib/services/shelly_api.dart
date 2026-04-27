@@ -56,6 +56,26 @@ class ShellyApi {
     );
   }
 
+  /// Lê o ID cloud do dispositivo (ex: "shellyplusplug-aabbccddeeff").
+  /// Usado para guardar o shellyCloudId quando o dispositivo está acessível localmente.
+  static Future<String?> getDeviceInfo(String ip) async {
+    try {
+      final uri = Uri.parse('http://$ip/rpc/Shelly.GetDeviceInfo');
+      final res = await http.get(uri).timeout(const Duration(seconds: 4));
+      if (res.statusCode != 200) return null;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return data['id'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Reinicia o dispositivo Shelly Gen 2/3.
+  static Future<void> reboot(String ip) async {
+    final uri = Uri.parse('http://$ip/rpc/Shelly.Reboot');
+    await http.get(uri).timeout(const Duration(seconds: 5));
+  }
+
   /// Verifica se o Shelly está acessível na rede.
   static Future<bool> isReachable(String ip) async {
     try {

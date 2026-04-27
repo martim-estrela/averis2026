@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'services/auth_service.dart';
+import 'theme/app_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ecrã de configuração MFA (ativar/desativar, acessível a partir das Definições)
@@ -126,7 +127,7 @@ class _EnableMfaViewState extends State<_EnableMfaView> {
 
   @override
   Widget build(BuildContext context) {
-    const primary = Color(0xFF38A3F1);
+    const primary = kPrimary;
 
     if (_loading) return const Center(child: CircularProgressIndicator());
 
@@ -428,7 +429,7 @@ class _StepHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const primary = Color(0xFF38A3F1);
+    const primary = kPrimary;
     return Row(
       children: [
         CircleAvatar(
@@ -491,7 +492,7 @@ class _SetupCodeInputState extends State<_SetupCodeInput> {
 
   @override
   Widget build(BuildContext context) {
-    const primary = Color(0xFF38A3F1);
+    const primary = kPrimary;
     final code = widget.value;
 
     return Column(

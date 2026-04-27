@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'notif_repository.dart';
 import 'shelly_api.dart';
 import 'user_service.dart';
 
@@ -8,6 +9,7 @@ class ShellyPollingService {
 
   static Timer? _timer;
   static const _interval = Duration(seconds: 30);
+  static final Map<String, bool> _highConsumptionNotified = {};
 
   static Future<void> start(String uid) async {
     stop();
@@ -41,10 +43,12 @@ class ShellyPollingService {
     final ip = deviceData['ip'] as String?;
     if (ip == null || ip.isEmpty) return;
 
+    final wasOnline = deviceData['online'] == true;
+    final deviceName = (deviceData['name'] as String?) ?? 'Dispositivo';
+
     try {
       final metrics = await ShellyApi.getMetrics(ip);
 
-      // ✅ Passa uid para saveReading
       await UserService.saveReading(
         uid: uid,
         deviceId: deviceId,
@@ -55,7 +59,6 @@ class ShellyPollingService {
         totalWh: metrics.totalWh,
       );
 
-      // ✅ users/{uid}/devices/{deviceId}
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -66,6 +69,31 @@ class ShellyPollingService {
         'lastSeenAt': FieldValue.serverTimestamp(),
         'status': metrics.isOn ? 'on' : 'off',
       });
+
+      if (!wasOnline) {
+        await NotifRepository.write(
+          uid: uid,
+          type: 'device_online',
+          title: '$deviceName voltou a estar online',
+          body: 'O dispositivo está acessível novamente.',
+          metadata: {'deviceId': deviceId},
+        );
+      }
+
+      if (metrics.powerW > 2000 &&
+          _highConsumptionNotified[deviceId] != true) {
+        _highConsumptionNotified[deviceId] = true;
+        await NotifRepository.write(
+          uid: uid,
+          type: 'high_consumption',
+          title: 'Consumo elevado detetado',
+          body:
+              '$deviceName está a consumir ${metrics.powerW.toStringAsFixed(0)} W.',
+          metadata: {'deviceId': deviceId, 'powerW': metrics.powerW},
+        );
+      } else if (metrics.powerW <= 2000) {
+        _highConsumptionNotified.remove(deviceId);
+      }
     } catch (_) {
       await FirebaseFirestore.instance
           .collection('users')
@@ -73,6 +101,16 @@ class ShellyPollingService {
           .collection('devices')
           .doc(deviceId)
           .update({'online': false});
+
+      if (wasOnline) {
+        await NotifRepository.write(
+          uid: uid,
+          type: 'device_offline',
+          title: '$deviceName ficou offline',
+          body: 'Não foi possível contactar o dispositivo.',
+          metadata: {'deviceId': deviceId},
+        );
+      }
     }
   }
 }

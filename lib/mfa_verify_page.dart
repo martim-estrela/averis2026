@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'services/auth_service.dart';
+import 'theme/app_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ecrã de verificação MFA (aparece após login quando MFA está ativo)
@@ -56,7 +57,7 @@ class _MfaVerifyPageState extends State<MfaVerifyPage> {
 
   @override
   Widget build(BuildContext context) {
-    const primary = Color(0xFF38A3F1);
+    const primary = kPrimary;
 
     return Scaffold(
       body: SafeArea(
@@ -225,7 +226,7 @@ class _SixDigitInputState extends State<_SixDigitInput> {
 
   @override
   Widget build(BuildContext context) {
-    const primary = Color(0xFF38A3F1);
+    const primary = kPrimary;
     final code = widget.value;
 
     return Column(
