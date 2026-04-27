@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'home_page.dart';
 import 'services/user_service.dart';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -108,15 +107,6 @@ class _RegisterPageState extends State<RegisterPage> {
         _loading  = false;
       });
 
-      // AuthGate will navigate to HomePage via authStateChanges.
-      // Explicit push after 2s acts as a fallback.
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-          (_) => false,
-        );
-      });
     } on FirebaseAuthException catch (e) {
       if (mounted) setState(() => _error = _mapError(e.code));
     } catch (_) {

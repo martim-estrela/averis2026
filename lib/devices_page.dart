@@ -251,19 +251,21 @@ class _SummaryCardState extends State<_SummaryCard> {
 
   Future<void> _fetchKwh() async {
     final today = _dateKey(DateTime.now());
-    double total = 0;
-    for (final doc in widget.devices) {
-      final snap = await FirebaseFirestore.instance
+    final snaps = await Future.wait(
+      widget.devices.map((doc) => FirebaseFirestore.instance
           .collection('users')
           .doc(widget.userId)
           .collection('devices')
           .doc(doc.id)
           .collection('dailyStats')
           .doc(today)
-          .get();
-      total +=
-          (snap.data()?['estimatedKwh'] as num?)?.toDouble() ?? 0;
-    }
+          .get()),
+    );
+    final total = snaps.fold<double>(
+      0,
+      (acc, snap) =>
+          acc + ((snap.data()?['estimatedKwh'] as num?)?.toDouble() ?? 0),
+    );
     if (mounted) setState(() { _todayKwh = total; _fetched = true; });
   }
 

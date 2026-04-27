@@ -1,5 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -625,7 +627,7 @@ class _GoalBottomSheetState extends State<_GoalBottomSheet> {
   late TextEditingController _textCtrl;
   bool _saving = false;
 
-  double get _maxVal => widget.isKwh ? 300.0 : 100.0;
+  double get _maxVal => widget.isKwh ? 500.0 : 200.0;
   String get _unit => widget.isKwh ? 'kWh' : '€';
   String get _fieldKey =>
       widget.isKwh ? 'monthlyKwhTarget' : 'monthlyCostTarget';
@@ -932,39 +934,19 @@ class _EnergiaSectionState extends State<_EnergiaSection> {
                     },
                     child: Column(
                       children: TipoContrato.values.map((t) {
-                        return InkWell(
-                          onTap: () => _changeTipo(t),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              children: [
-                                Radio<TipoContrato>(
-                                  value: t,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        t.label,
-                                        style:
-                                            const TextStyle(fontSize: 13),
-                                      ),
-                                      Text(
-                                        t.descricao,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFF9CA3AF),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                        return RadioListTile<TipoContrato>(
+                          value: t,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: Text(
+                            t.label,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          subtitle: Text(
+                            t.descricao,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF9CA3AF),
                             ),
                           ),
                         );
@@ -1109,6 +1091,7 @@ class _NotificacoesSectionState extends State<_NotificacoesSection> {
   late bool _quietEnabled;
   late TextEditingController _startCtrl;
   late TextEditingController _endCtrl;
+  Timer? _quietDebounce;
 
   static final _timeRegex = RegExp(r'^([01]\d|2[0-3]):([0-5]\d)$');
 
@@ -1126,6 +1109,7 @@ class _NotificacoesSectionState extends State<_NotificacoesSection> {
 
   @override
   void dispose() {
+    _quietDebounce?.cancel();
     _startCtrl.dispose();
     _endCtrl.dispose();
     super.dispose();
@@ -1264,7 +1248,13 @@ class _NotificacoesSectionState extends State<_NotificacoesSection> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    onChanged: (_) => _persist(),
+                    onChanged: (_) {
+                      _quietDebounce?.cancel();
+                      _quietDebounce = Timer(
+                        const Duration(milliseconds: 800),
+                        _persist,
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1277,7 +1267,13 @@ class _NotificacoesSectionState extends State<_NotificacoesSection> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    onChanged: (_) => _persist(),
+                    onChanged: (_) {
+                      _quietDebounce?.cancel();
+                      _quietDebounce = Timer(
+                        const Duration(milliseconds: 800),
+                        _persist,
+                      );
+                    },
                   ),
                 ),
               ],
@@ -1392,7 +1388,6 @@ class _SessaoSectionState extends State<_SessaoSection> {
       final db = FirebaseFirestore.instance;
       final uid = widget.uid;
 
-      // Delete top-level subcollection documents (devices + notifications)
       final devicesSnap = await db
           .collection('users')
           .doc(uid)
@@ -1404,15 +1399,33 @@ class _SessaoSectionState extends State<_SessaoSection> {
           .collection('notifications')
           .get();
 
-      final batch = db.batch();
-      for (final doc in devicesSnap.docs) {
-        batch.delete(doc.reference);
+      // Fetch device subcollections in parallel so they are also deleted
+      final subSnaps = await Future.wait(
+        devicesSnap.docs.expand((d) => [
+          db.collection('users').doc(uid)
+              .collection('devices').doc(d.id)
+              .collection('dailyStats').get(),
+          db.collection('users').doc(uid)
+              .collection('devices').doc(d.id)
+              .collection('readings').get(),
+        ]),
+      );
+
+      final toDelete = <DocumentReference>[
+        ...subSnaps.expand((s) => s.docs.map((d) => d.reference)),
+        ...devicesSnap.docs.map((d) => d.reference),
+        ...notifsSnap.docs.map((d) => d.reference),
+        db.collection('users').doc(uid),
+      ];
+
+      // Commit in batches of 400 (Firestore hard limit is 500)
+      for (var i = 0; i < toDelete.length; i += 400) {
+        final batch = db.batch();
+        for (final ref in toDelete.skip(i).take(400)) {
+          batch.delete(ref);
+        }
+        await batch.commit();
       }
-      for (final doc in notifsSnap.docs) {
-        batch.delete(doc.reference);
-      }
-      batch.delete(db.collection('users').doc(uid));
-      await batch.commit();
 
       ShellyPollingService.stop();
       await user.delete();
