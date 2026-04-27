@@ -106,6 +106,7 @@ class UserService {
           },
         },
       },
+      'onboardingDone': false,
       '_notifState': {
         'lastGoal': false,
         'lastLevel': 1,

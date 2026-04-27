@@ -10,7 +10,6 @@ import 'mfa_verify_page.dart';
 import 'onboarding_page.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
-import 'services/prefs_service.dart';
 import 'services/shelly_polling_service.dart';
 import 'services/user_service.dart';
 
@@ -159,8 +158,14 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     if (!mounted) return;
-    final onboardingDone = await PrefsService.isOnboardingDone();
+    final userSnap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
     if (!mounted) return;
+    // Field absent (existing users) → null → treat as true (skip onboarding)
+    final onboardingDone =
+        (userSnap.data()?['onboardingDone'] as bool?) ?? true;
     setState(() => _state =
         onboardingDone ? _AuthState.authenticated : _AuthState.onboarding);
   }

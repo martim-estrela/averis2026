@@ -17,11 +17,11 @@ import 'services/user_service.dart';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
-const _kBg      = Color(0xFF0a1628);
-const _kNav     = Color(0xFF0f1e3d);
-const _kAccent  = Color(0xFF38d9a9);
+const _kBg = Color(0xFF0a1628);
+const _kNav = Color(0xFF0f1e3d);
+const _kAccent = Color(0xFF38d9a9);
 const _kSurface = Color(0xFF132040);
-const _kBorder  = Color(0xFF1e3a6e);
+const _kBorder = Color(0xFF1e3a6e);
 
 // ── Enum ─────────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,11 @@ class _ShellyFound {
   final String ip;
   final String model;
   final String mac;
-  const _ShellyFound({required this.ip, required this.model, required this.mac});
+  const _ShellyFound({
+    required this.ip,
+    required this.model,
+    required this.mac,
+  });
 }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
@@ -76,7 +80,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
 
   // ── Manual controllers ─────────────────────────────────────────────────────
   final _manNameCtrl = TextEditingController();
-  final _manIpCtrl   = TextEditingController();
+  final _manIpCtrl = TextEditingController();
 
   @override
   void dispose() {
@@ -126,8 +130,8 @@ class _AddDevicePageState extends State<AddDevicePage> {
   // ══════════════════════════════════════════════════════════════════════════
 
   Future<void> _doProvisioning() async {
-    final name     = _provNameCtrl.text.trim();
-    final ssid     = _provSsidCtrl.text.trim();
+    final name = _provNameCtrl.text.trim();
+    final ssid = _provSsidCtrl.text.trim();
     final password = _provPassCtrl.text;
 
     if (name.isEmpty) {
@@ -163,7 +167,9 @@ class _AddDevicePageState extends State<AddDevicePage> {
       _LoadingDialog.update(context, 'A enviar configuração WiFi…');
       try {
         await ShellyProvisioningService.setWifiConfig(
-            ssid: ssid, password: password);
+          ssid: ssid,
+          password: password,
+        );
       } catch (_) {
         _LoadingDialog.hide(context);
         _snackError('Falha ao enviar configuração WiFi.');
@@ -312,7 +318,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
 
   Future<void> _doAddScanned() async {
     final device = _selectedDevice;
-    final name   = _scanNameCtrl.text.trim();
+    final name = _scanNameCtrl.text.trim();
     if (device == null) {
       _snackError('Seleciona um dispositivo da lista.');
       return;
@@ -357,7 +363,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
 
   Future<void> _doManual() async {
     final name = _manNameCtrl.text.trim();
-    final ip   = _manIpCtrl.text.trim();
+    final ip = _manIpCtrl.text.trim();
 
     if (name.isEmpty) {
       _snackError('Introduz um nome para o dispositivo.');
@@ -372,8 +378,9 @@ class _AddDevicePageState extends State<AddDevicePage> {
     try {
       bool reachable;
       try {
-        reachable = await ShellyApi.isReachable(ip)
-            .timeout(const Duration(seconds: 5));
+        reachable = await ShellyApi.isReachable(
+          ip,
+        ).timeout(const Duration(seconds: 5));
       } catch (_) {
         reachable = false;
       }
@@ -481,12 +488,14 @@ class _AddDevicePageState extends State<AddDevicePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _StepsList(steps: const [
-          'Liga o Shelly à tomada — LED deve piscar laranja',
-          'Vai às Definições de WiFi do telemóvel',
-          'Liga-te à rede  ShellyPlugSG3-XXXXXX',
-          'Volta aqui e clica em "Ligar ao Shelly"',
-        ]),
+        _StepsList(
+          steps: const [
+            'Liga o Shelly à tomada — LED deve piscar azul',
+            'Vai às Definições de WiFi do telemóvel',
+            'Liga-te à rede  ShellyPlugSG3-XXXXXX',
+            'Volta aqui e clica em "Ligar ao Shelly"',
+          ],
+        ),
         const SizedBox(height: 20),
         _DarkTextField(
           label: 'Nome do dispositivo',
@@ -561,16 +570,19 @@ class _AddDevicePageState extends State<AddDevicePage> {
                     Text(
                       'A procurar dispositivos… ($_scanProgress/254)',
                       style: const TextStyle(
-                          color: Colors.white70, fontSize: 13),
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
                     ),
                     GestureDetector(
                       onTap: _stopScan,
                       child: const Text(
                         'Parar',
                         style: TextStyle(
-                            color: _kAccent,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600),
+                          color: _kAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -582,7 +594,8 @@ class _AddDevicePageState extends State<AddDevicePage> {
                     value: _scanProgress / 254,
                     backgroundColor: Colors.white12,
                     valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF2d5fa6)),
+                      Color(0xFF2d5fa6),
+                    ),
                     minHeight: 6,
                   ),
                 ),
@@ -599,19 +612,22 @@ class _AddDevicePageState extends State<AddDevicePage> {
               child: Text(
                 'Encontrados até agora:',
                 style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500),
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ..._scanResults.map((d) => _ScanResultCard(
-                device: d,
-                selected: _selectedDevice?.ip == d.ip,
-                onSelect: () => setState(() {
-                  _selectedDevice = d;
-                  _scanNameCtrl.text = 'Shelly @ ${d.ip}';
-                }),
-              )),
+          ..._scanResults.map(
+            (d) => _ScanResultCard(
+              device: d,
+              selected: _selectedDevice?.ip == d.ip,
+              onSelect: () => setState(() {
+                _selectedDevice = d;
+                _scanNameCtrl.text = 'Shelly @ ${d.ip}';
+              }),
+            ),
+          ),
           const SizedBox(height: 16),
           if (_selectedDevice != null) ...[
             _DarkTextField(
@@ -621,26 +637,27 @@ class _AddDevicePageState extends State<AddDevicePage> {
             ),
             const SizedBox(height: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: _kSurface,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: _kBorder),
               ),
-              child: Row(children: [
-                const Icon(Icons.router, color: Colors.grey, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  _selectedDevice!.ip,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  '(preenchido automaticamente)',
-                  style: TextStyle(color: Colors.grey, fontSize: 11),
-                ),
-              ]),
+              child: Row(
+                children: [
+                  const Icon(Icons.router, color: Colors.grey, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    _selectedDevice!.ip,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '(preenchido automaticamente)',
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             _PrimaryButton(
@@ -654,8 +671,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
             Center(
               child: TextButton.icon(
                 onPressed: _doScan,
-                icon: const Icon(Icons.refresh,
-                    color: _kAccent, size: 16),
+                icon: const Icon(Icons.refresh, color: _kAccent, size: 16),
                 label: const Text(
                   'Fazer novo scan',
                   style: TextStyle(color: _kAccent, fontSize: 13),
@@ -776,9 +792,7 @@ class _MethodCard extends StatelessWidget {
         width: 100,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected
-              ? color.withValues(alpha: 0.08)
-              : _kSurface,
+          color: isSelected ? color.withValues(alpha: 0.08) : _kSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? color : _kBorder,
@@ -867,7 +881,11 @@ class _StepsList extends StatelessWidget {
                 Expanded(
                   child: Text(
                     e.value,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ],
@@ -925,8 +943,10 @@ class _DarkTextField extends StatelessWidget {
             suffixIcon: suffix,
             filled: true,
             fillColor: _kSurface,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 13,
+            ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: _kBorder, width: 0.5),
@@ -967,8 +987,7 @@ class _PrimaryButton extends StatelessWidget {
         icon: Icon(icon, size: 18),
         label: Text(
           label,
-          style: const TextStyle(
-              fontSize: 14, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: _kNav,
@@ -1007,9 +1026,7 @@ class _ScanResultCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: selected
-              ? _kAccent.withValues(alpha: 0.08)
-              : _kSurface,
+          color: selected ? _kAccent.withValues(alpha: 0.08) : _kSurface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: selected ? _kAccent : _kBorder,
@@ -1025,8 +1042,11 @@ class _ScanResultCard extends StatelessWidget {
                 color: const Color(0xFF2d5fa6).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.electrical_services,
-                  color: Color(0xFF2d5fa6), size: 20),
+              child: const Icon(
+                Icons.electrical_services,
+                color: Color(0xFF2d5fa6),
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1043,16 +1063,14 @@ class _ScanResultCard extends StatelessWidget {
                   ),
                   Text(
                     device.ip,
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 11),
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                 ],
               ),
             ),
             AnimatedContainer(
               duration: const Duration(milliseconds: 150),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
                 color: selected ? _kAccent : _kNav,
                 borderRadius: BorderRadius.circular(8),
@@ -1149,11 +1167,7 @@ class _SuccessView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.check_circle_outline,
-              size: 80,
-              color: _kAccent,
-            ),
+            const Icon(Icons.check_circle_outline, size: 80, color: _kAccent),
             const SizedBox(height: 20),
             const Text(
               'Dispositivo adicionado!',
@@ -1184,8 +1198,7 @@ class _SuccessView extends StatelessWidget {
                 ),
                 child: const Text(
                   'Ver os meus dispositivos',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ),
             ),

@@ -3,11 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'services/auth_service.dart';
-import 'theme/app_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ecrã de configuração MFA (ativar/desativar, acessível a partir das Definições)
 // ─────────────────────────────────────────────────────────────────────────────
+
+const _kBg      = Color(0xFF0a1628);
+const _kSurface = Color(0xFF0f1e3d);
+const _kAccent  = Color(0xFF38d9a9);
+const _kField   = Color(0xFF1a2e52);
+const _kBorder  = Color(0xFF2a4070);
 
 class MfaSetupPage extends StatefulWidget {
   const MfaSetupPage({super.key});
@@ -41,9 +46,19 @@ class _MfaSetupPageState extends State<MfaSetupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Verificação em dois passos')),
+      backgroundColor: _kBg,
+      appBar: AppBar(
+        backgroundColor: _kSurface,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'Verificação em dois passos',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: _kAccent))
           : _mfaEnabled
               ? _DisableMfaView(onDisabled: () => setState(() => _mfaEnabled = false))
               : _EnableMfaView(onEnabled: () => setState(() => _mfaEnabled = true)),
@@ -127,9 +142,9 @@ class _EnableMfaViewState extends State<_EnableMfaView> {
 
   @override
   Widget build(BuildContext context) {
-    const primary = kPrimary;
-
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: _kAccent));
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -142,14 +157,14 @@ class _EnableMfaViewState extends State<_EnableMfaView> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: _kSurface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: _kBorder),
             ),
             child: const Text(
               'Instala o Google Authenticator ou Microsoft Authenticator '
               'no teu telemóvel. Estas apps são gratuitas.',
-              style: TextStyle(fontSize: 14),
+              style: TextStyle(fontSize: 14, color: Color(0xB3FFFFFF)),
             ),
           ),
           const SizedBox(height: 28),
@@ -165,7 +180,7 @@ class _EnableMfaViewState extends State<_EnableMfaView> {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 12,
                   ),
                 ],
@@ -192,9 +207,9 @@ class _EnableMfaViewState extends State<_EnableMfaView> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: _kField,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: _kBorder),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -206,20 +221,21 @@ class _EnableMfaViewState extends State<_EnableMfaView> {
                         fontSize: 13,
                         letterSpacing: 1.5,
                         fontWeight: FontWeight.w600,
+                        color: _kAccent,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(Icons.copy, size: 16, color: Colors.grey),
+                    const Icon(Icons.copy, size: 16, color: _kAccent),
                   ],
                 ),
               ),
             ),
           ),
           const SizedBox(height: 6),
-          Center(
+          const Center(
             child: Text(
               'Ou insere o código manualmente na app (toca para copiar)',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 12, color: Color(0x80FFFFFF)),
               textAlign: TextAlign.center,
             ),
           ),
@@ -228,10 +244,10 @@ class _EnableMfaViewState extends State<_EnableMfaView> {
           // Passo 3
           _StepHeader(step: 3, title: 'Confirma com o primeiro código'),
           const SizedBox(height: 16),
-          Center(
+          const Center(
             child: Text(
               'Introduz o código de 6 dígitos que aparece na app',
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              style: TextStyle(color: Color(0x80FFFFFF), fontSize: 14),
               textAlign: TextAlign.center,
             ),
           ),
@@ -255,19 +271,27 @@ class _EnableMfaViewState extends State<_EnableMfaView> {
             child: ElevatedButton(
               onPressed: (_code.length == 6 && !_confirming) ? _confirm : null,
               style: ElevatedButton.styleFrom(
-                backgroundColor: primary,
-                foregroundColor: Colors.white,
+                backgroundColor: _kAccent,
+                foregroundColor: const Color(0xFF04342c),
+                disabledBackgroundColor: _kAccent.withValues(alpha: 0.35),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
+                elevation: 0,
               ),
               child: _confirming
                   ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF04342c),
+                      ),
                     )
-                  : const Text('Ativar', style: TextStyle(fontSize: 16)),
+                  : const Text(
+                      'Ativar',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
             ),
           ),
         ],
@@ -337,13 +361,13 @@ class _DisableMfaViewState extends State<_DisableMfaView> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.green.shade50,
+              color: _kSurface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.green.shade200),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
             ),
             child: Row(
               children: [
-                Icon(Icons.verified_user, color: Colors.green.shade600),
+                Icon(Icons.verified_user, color: Colors.green.shade400),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -353,15 +377,15 @@ class _DisableMfaViewState extends State<_DisableMfaView> {
                         'Verificação em dois passos ativa',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.green.shade700,
+                          color: Colors.green.shade400,
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
+                      const Text(
                         'A tua conta está protegida com TOTP.',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.green.shade600,
+                          color: Color(0x80FFFFFF),
                         ),
                       ),
                     ],
@@ -374,7 +398,7 @@ class _DisableMfaViewState extends State<_DisableMfaView> {
 
           const Text(
             'Para desativar, confirma com o código atual da tua app autenticadora:',
-            style: TextStyle(fontSize: 14),
+            style: TextStyle(fontSize: 14, color: Color(0xB3FFFFFF)),
           ),
           const SizedBox(height: 20),
 
@@ -398,9 +422,11 @@ class _DisableMfaViewState extends State<_DisableMfaView> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red.shade400,
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.red.withValues(alpha: 0.35),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
+                elevation: 0,
               ),
               child: _disabling
                   ? const SizedBox(
@@ -408,7 +434,10 @@ class _DisableMfaViewState extends State<_DisableMfaView> {
                       width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Desativar', style: TextStyle(fontSize: 16)),
+                  : const Text(
+                      'Desativar',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
             ),
           ),
         ],
@@ -429,16 +458,15 @@ class _StepHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const primary = kPrimary;
     return Row(
       children: [
         CircleAvatar(
           radius: 14,
-          backgroundColor: primary,
+          backgroundColor: _kAccent,
           child: Text(
             '$step',
             style: const TextStyle(
-              color: Colors.white,
+              color: Color(0xFF04342c),
               fontWeight: FontWeight.bold,
               fontSize: 13,
             ),
@@ -447,15 +475,19 @@ class _StepHeader extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.white,
+          ),
         ),
       ],
     );
   }
 }
 
-// Reutiliza o mesmo widget de 6 caixas (código copiado de mfa_verify_page.dart
-// para evitar dependência circular; pode ser extraído para um ficheiro comum)
+// Reutiliza o mesmo widget de 6 caixas
+// (pode ser extraído para ficheiro comum se necessário)
 class _SetupCodeInput extends StatefulWidget {
   final String value;
   final String? errorText;
@@ -476,6 +508,12 @@ class _SetupCodeInputState extends State<_SetupCodeInput> {
   final _focus = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+  }
+
+  @override
   void didUpdateWidget(_SetupCodeInput old) {
     super.didUpdateWidget(old);
     if (widget.value.isEmpty && _controller.text.isNotEmpty) {
@@ -492,7 +530,6 @@ class _SetupCodeInputState extends State<_SetupCodeInput> {
 
   @override
   Widget build(BuildContext context) {
-    const primary = kPrimary;
     final code = widget.value;
 
     return Column(
@@ -505,24 +542,24 @@ class _SetupCodeInputState extends State<_SetupCodeInput> {
               children: List.generate(6, (i) {
                 final isFilled = i < code.length;
                 final isActive = i == code.length;
+                final hasError = widget.errorText != null;
+
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 120),
                   width: 46,
                   height: 58,
                   margin: const EdgeInsets.symmetric(horizontal: 5),
                   decoration: BoxDecoration(
-                    color: isFilled
-                        ? primary.withValues(alpha: 0.07)
-                        : Colors.grey.shade50,
+                    color: isFilled ? _kAccent.withValues(alpha: 0.12) : _kField,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: widget.errorText != null
-                          ? Colors.red
+                      color: hasError
+                          ? Colors.red.shade400
                           : isActive
-                              ? primary
+                              ? _kAccent
                               : isFilled
-                                  ? primary.withValues(alpha: 0.5)
-                                  : Colors.grey.shade300,
+                                  ? _kAccent.withValues(alpha: 0.5)
+                                  : _kBorder,
                       width: isActive ? 2.0 : 1.5,
                     ),
                   ),
@@ -533,7 +570,7 @@ class _SetupCodeInputState extends State<_SetupCodeInput> {
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: primary,
+                            color: _kAccent,
                           ),
                         )
                       : null,

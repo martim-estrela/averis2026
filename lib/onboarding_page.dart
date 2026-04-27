@@ -1,9 +1,10 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'add_device_page.dart';
 import 'home_page.dart';
-import 'services/prefs_service.dart';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -94,7 +95,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _skip(BuildContext ctx) async {
-    await PrefsService.setOnboardingDone();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({'onboardingDone': true});
+    }
     if (!ctx.mounted) return;
     Navigator.of(ctx).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomePage()),
@@ -103,7 +110,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _addDevice(BuildContext ctx) async {
-    await PrefsService.setOnboardingDone();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({'onboardingDone': true});
+    }
     if (!ctx.mounted) return;
     final nav = Navigator.of(ctx);
     nav.pushAndRemoveUntil(

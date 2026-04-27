@@ -132,8 +132,7 @@ class _LoginPageState extends State<LoginPage> {
       suffixIcon: suffix,
       filled: true,
       fillColor: _kField,
-      contentPadding:
-          const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: const BorderSide(color: _kFieldBorder, width: 0.5),
@@ -230,7 +229,7 @@ class _LoginPageState extends State<LoginPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'Bem-vindo de volta',
+                      'Bem-vindo',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -240,10 +239,7 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 4),
                     const Text(
                       'Inicia sessão para continuar',
-                      style: TextStyle(
-                        color: Color(0x73FFFFFF),
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Color(0x73FFFFFF), fontSize: 12),
                     ),
                     const SizedBox(height: 24),
 
@@ -296,10 +292,9 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                               ),
                             ),
-                            validator: (v) =>
-                                (v == null || v.isEmpty)
-                                    ? 'A password é obrigatória.'
-                                    : null,
+                            validator: (v) => (v == null || v.isEmpty)
+                                ? 'A password é obrigatória.'
+                                : null,
                           ),
                         ],
                       ),
@@ -368,8 +363,9 @@ class _LoginPageState extends State<LoginPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _kAccent,
                           foregroundColor: const Color(0xFF04342c),
-                          disabledBackgroundColor:
-                              _kAccent.withValues(alpha: 0.45),
+                          disabledBackgroundColor: _kAccent.withValues(
+                            alpha: 0.45,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),

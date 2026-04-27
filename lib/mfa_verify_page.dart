@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'services/auth_service.dart';
-import 'theme/app_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ecrã de verificação MFA (aparece após login quando MFA está ativo)
 // ─────────────────────────────────────────────────────────────────────────────
+
+const _kBg      = Color(0xFF0a1628);
+const _kSurface = Color(0xFF0f1e3d);
+const _kAccent  = Color(0xFF38d9a9);
+const _kField   = Color(0xFF1a2e52);
+const _kBorder  = Color(0xFF2a4070);
 
 class MfaVerifyPage extends StatefulWidget {
   final String uid;
@@ -57,9 +62,8 @@ class _MfaVerifyPageState extends State<MfaVerifyPage> {
 
   @override
   Widget build(BuildContext context) {
-    const primary = kPrimary;
-
     return Scaffold(
+      backgroundColor: _kBg,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
@@ -74,10 +78,11 @@ class _MfaVerifyPageState extends State<MfaVerifyPage> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    color: primary.withValues(alpha: 0.1),
+                    color: _kSurface,
                     shape: BoxShape.circle,
+                    border: Border.all(color: _kAccent.withValues(alpha: 0.4), width: 2),
                   ),
-                  child: const Icon(Icons.shield_outlined, size: 40, color: primary),
+                  child: const Icon(Icons.shield_outlined, size: 40, color: _kAccent),
                 ),
               ),
               const SizedBox(height: 24),
@@ -85,15 +90,19 @@ class _MfaVerifyPageState extends State<MfaVerifyPage> {
               const Center(
                 child: Text(
                   'Verificação em dois passos',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
               const SizedBox(height: 8),
-              Center(
+              const Center(
                 child: Text(
                   'Introduz o código de 6 dígitos da tua app autenticadora',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  style: TextStyle(color: Color(0x80FFFFFF), fontSize: 14),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -119,30 +128,41 @@ class _MfaVerifyPageState extends State<MfaVerifyPage> {
                 child: ElevatedButton(
                   onPressed: (_code.length == 6 && !_isVerifying) ? _verify : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: primary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: _kAccent,
+                    foregroundColor: const Color(0xFF04342c),
+                    disabledBackgroundColor: _kAccent.withValues(alpha: 0.35),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
+                    elevation: 0,
                   ),
                   child: _isVerifying
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF04342c),
+                          ),
                         )
-                      : const Text('Verificar', style: TextStyle(fontSize: 16)),
+                      : const Text(
+                          'Verificar',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // Cancelar / sair
+              // Cancelar
               Center(
                 child: TextButton(
                   onPressed: widget.onCancel,
-                  child: Text(
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0x66FFFFFF),
+                  ),
+                  child: const Text(
                     'Cancelar e terminar sessão',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    style: TextStyle(fontSize: 13),
                   ),
                 ),
               ),
@@ -150,22 +170,23 @@ class _MfaVerifyPageState extends State<MfaVerifyPage> {
 
               // Ajuda
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: _kSurface,
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _kBorder),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+                    const Icon(Icons.info_outline, size: 18, color: _kAccent),
                     const SizedBox(width: 10),
-                    Expanded(
+                    const Expanded(
                       child: Text(
                         'Abre o Google Authenticator ou Microsoft Authenticator '
                         'e usa o código de 6 dígitos para AVERIS. '
                         'O código muda a cada 30 segundos.',
-                        style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
+                        style: TextStyle(fontSize: 13, color: Color(0xB3FFFFFF)),
                       ),
                     ),
                   ],
@@ -180,7 +201,7 @@ class _MfaVerifyPageState extends State<MfaVerifyPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Widget: 6 caixas de dígito (estilo app bancária)
+// Widget: 6 caixas de dígito (estilo app bancária) — tema escuro
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _SixDigitInput extends StatefulWidget {
@@ -211,7 +232,6 @@ class _SixDigitInputState extends State<_SixDigitInput> {
   @override
   void didUpdateWidget(_SixDigitInput old) {
     super.didUpdateWidget(old);
-    // Limpar caixas quando o parent reseta o valor
     if (widget.value.isEmpty && _controller.text.isNotEmpty) {
       _controller.clear();
     }
@@ -226,7 +246,6 @@ class _SixDigitInputState extends State<_SixDigitInput> {
 
   @override
   Widget build(BuildContext context) {
-    const primary = kPrimary;
     final code = widget.value;
 
     return Column(
@@ -234,30 +253,29 @@ class _SixDigitInputState extends State<_SixDigitInput> {
         Stack(
           alignment: Alignment.center,
           children: [
-            // Caixas visuais
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(6, (i) {
                 final isFilled = i < code.length;
                 final isActive = i == code.length;
+                final hasError = widget.errorText != null;
+
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 120),
                   width: 46,
                   height: 58,
                   margin: const EdgeInsets.symmetric(horizontal: 5),
                   decoration: BoxDecoration(
-                    color: isFilled
-                        ? primary.withValues(alpha: 0.07)
-                        : Colors.grey.shade50,
+                    color: isFilled ? _kAccent.withValues(alpha: 0.12) : _kField,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: widget.errorText != null
-                          ? Colors.red
+                      color: hasError
+                          ? Colors.red.shade400
                           : isActive
-                              ? primary
+                              ? _kAccent
                               : isFilled
-                                  ? primary.withValues(alpha: 0.5)
-                                  : Colors.grey.shade300,
+                                  ? _kAccent.withValues(alpha: 0.5)
+                                  : _kBorder,
                       width: isActive ? 2.0 : 1.5,
                     ),
                   ),
@@ -268,7 +286,7 @@ class _SixDigitInputState extends State<_SixDigitInput> {
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: primary,
+                            color: _kAccent,
                           ),
                         )
                       : null,
@@ -276,7 +294,7 @@ class _SixDigitInputState extends State<_SixDigitInput> {
               }),
             ),
 
-            // Campo de texto invisível por cima — captura o teclado
+            // Campo invisível que captura o teclado
             Opacity(
               opacity: 0.0,
               child: TextField(

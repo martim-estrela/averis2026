@@ -1364,10 +1364,12 @@ class _HistoricoPageState extends State<HistoricoPage> {
 
   // ── PDF export ────────────────────────────────────────────────────────────
 
-  Future<void> _exportPdf(BuildContext context) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+  // Brand palette for PDF
+  static const _pdfNavy = PdfColor(0.059, 0.118, 0.239);   // #0f1e3d
+  static const _pdfTeal = PdfColor(0.220, 0.851, 0.663);   // #38d9a9
+  static const _pdfNavyLight = PdfColor(0.102, 0.180, 0.325); // #1a2e53
 
+  Future<void> _exportPdf(BuildContext context) async {
     if (!context.mounted) return;
     showDialog(
       context: context,
@@ -1382,13 +1384,26 @@ class _HistoricoPageState extends State<HistoricoPage> {
     );
 
     try {
-      final data = await _fetchData(uid);
+      final data = await _dataFuture;
       final totalKwh = data.current.values.fold(0.0, (a, b) => a + b);
+      final prevTotalKwh = data.previous.values.fold(0.0, (a, b) => a + b);
       final custoTotal = totalKwh * _energyPrice;
       final days = _daysBetween(_dataInicio, _dataFim);
       final mediaKwh = days > 0 ? totalKwh / days : 0.0;
       final rows = data.current.entries.toList()
         ..sort((a, b) => b.key.compareTo(a.key));
+
+      final deviceLabel = _selectedDeviceId == 'todos'
+          ? 'Todos os dispositivos'
+          : (_devices
+                  .where((d) => d.id == _selectedDeviceId)
+                  .firstOrNull
+                  ?.data()['name'] as String?) ??
+              'Dispositivo';
+
+      final periodDiff = prevTotalKwh > 0
+          ? (totalKwh - prevTotalKwh) / prevTotalKwh * 100
+          : null;
 
       String fmtDate(DateTime d) =>
           '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
@@ -1407,19 +1422,34 @@ class _HistoricoPageState extends State<HistoricoPage> {
                         style: pw.TextStyle(
                             fontSize: 20,
                             fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.blue900)),
+                            color: _pdfNavy)),
                     pw.Text('AVERIS',
-                        style: const pw.TextStyle(
-                            fontSize: 13, color: PdfColors.grey600)),
+                        style: pw.TextStyle(
+                            fontSize: 13,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _pdfTeal)),
                   ]),
-              pw.Divider(color: PdfColors.blue900, thickness: 1.5),
+              pw.Divider(color: _pdfTeal, thickness: 1.5),
               pw.SizedBox(height: 4),
             ]),
+        footer: (ctx) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              'Tarifa: ${_energyPrice.toStringAsFixed(2)} €/kWh  ·  $deviceLabel',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+            ),
+            pw.Text(
+              'Página ${ctx.pageNumber} de ${ctx.pagesCount}',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+            ),
+          ],
+        ),
         build: (_) => [
           pw.Container(
             padding: const pw.EdgeInsets.all(12),
             decoration: pw.BoxDecoration(
-                color: PdfColors.blue50,
+                color: _pdfNavy,
                 borderRadius: pw.BorderRadius.circular(8)),
             child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1429,30 +1459,44 @@ class _HistoricoPageState extends State<HistoricoPage> {
                       children: [
                         pw.Text('Período',
                             style: const pw.TextStyle(
-                                fontSize: 9, color: PdfColors.grey600)),
+                                fontSize: 9, color: PdfColors.grey400)),
                         pw.Text(
                             '${fmtDate(_dataInicio)}  →  ${fmtDate(_dataFim)}',
                             style: pw.TextStyle(
                                 fontSize: 12,
-                                fontWeight: pw.FontWeight.bold)),
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.white)),
+                      ]),
+                  pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Dispositivo',
+                            style: const pw.TextStyle(
+                                fontSize: 9, color: PdfColors.grey400)),
+                        pw.Text(deviceLabel,
+                            style: pw.TextStyle(
+                                fontSize: 12,
+                                fontWeight: pw.FontWeight.bold,
+                                color: _pdfTeal)),
                       ]),
                   pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text('Gerado em',
                             style: const pw.TextStyle(
-                                fontSize: 9, color: PdfColors.grey600)),
+                                fontSize: 9, color: PdfColors.grey400)),
                         pw.Text(fmtDate(DateTime.now()),
                             style: pw.TextStyle(
                                 fontSize: 12,
-                                fontWeight: pw.FontWeight.bold)),
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.white)),
                       ]),
                 ]),
           ),
           pw.SizedBox(height: 20),
           pw.Text('Resumo',
               style: pw.TextStyle(
-                  fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  fontSize: 14, fontWeight: pw.FontWeight.bold, color: _pdfNavy)),
           pw.SizedBox(height: 8),
           pw.Row(children: [
             _pdfBox('Consumo total', '${totalKwh.toStringAsFixed(2)} kWh'),
@@ -1461,12 +1505,61 @@ class _HistoricoPageState extends State<HistoricoPage> {
             pw.SizedBox(width: 10),
             _pdfBox('Média diária', '${mediaKwh.toStringAsFixed(2)} kWh/dia'),
             pw.SizedBox(width: 10),
-            _pdfBox('Dias com dados', '${data.current.length}'),
+            _pdfBox(
+              'vs período anterior',
+              periodDiff == null
+                  ? 'Sem dados'
+                  : '${periodDiff >= 0 ? '+' : ''}${periodDiff.toStringAsFixed(1)}%',
+              valueColor: periodDiff == null
+                  ? null
+                  : (periodDiff > 0 ? PdfColors.red700 : PdfColors.green700),
+            ),
           ]),
           pw.SizedBox(height: 24),
+          if (_selectedDeviceId == 'todos' && data.deviceTotals.isNotEmpty) ...[
+            pw.Text('Consumo por dispositivo',
+                style: pw.TextStyle(
+                    fontSize: 14, fontWeight: pw.FontWeight.bold, color: _pdfNavy)),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(3),
+                1: const pw.FlexColumnWidth(2),
+                2: const pw.FlexColumnWidth(2),
+                3: const pw.FlexColumnWidth(2),
+              },
+              children: [
+                pw.TableRow(
+                    decoration: pw.BoxDecoration(color: _pdfNavy),
+                    children: [
+                      _pdfTh('Dispositivo'),
+                      _pdfTh('kWh'),
+                      _pdfTh('€'),
+                      _pdfTh('% total'),
+                    ]),
+                ...data.deviceTotals.asMap().entries.map((e) {
+                  final i = e.key;
+                  final stat = e.value;
+                  final pct = totalKwh > 0 ? stat.kwh / totalKwh * 100 : 0.0;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                        color: i % 2 == 0 ? PdfColors.white : PdfColors.grey100),
+                    children: [
+                      _pdfTd(stat.name),
+                      _pdfTd(stat.kwh.toStringAsFixed(2)),
+                      _pdfTd((stat.kwh * _energyPrice).toStringAsFixed(2)),
+                      _pdfTd('${pct.toStringAsFixed(1)}%'),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 24),
+          ],
           pw.Text('Consumo por dia',
               style: pw.TextStyle(
-                  fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  fontSize: 14, fontWeight: pw.FontWeight.bold, color: _pdfNavy)),
           pw.SizedBox(height: 8),
           if (rows.isEmpty)
             pw.Text('Sem dados.',
@@ -1483,8 +1576,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
               },
               children: [
                 pw.TableRow(
-                    decoration:
-                        const pw.BoxDecoration(color: PdfColors.blue900),
+                    decoration: pw.BoxDecoration(color: _pdfNavy),
                     children: [
                       _pdfTh('Dia'),
                       _pdfTh('kWh'),
@@ -1504,7 +1596,7 @@ class _HistoricoPageState extends State<HistoricoPage> {
                             ? PdfColors.white
                             : PdfColors.grey100),
                     children: [
-                      _pdfTd('${d.day}/${d.month}/${d.year}'),
+                      _pdfTd('${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}'),
                       _pdfTd(kwh.toStringAsFixed(2)),
                       _pdfTd((kwh * _energyPrice).toStringAsFixed(2)),
                       _pdfTd(
@@ -1515,21 +1607,15 @@ class _HistoricoPageState extends State<HistoricoPage> {
                   );
                 }),
                 pw.TableRow(
-                    decoration:
-                        const pw.BoxDecoration(color: PdfColors.blue50),
+                    decoration: pw.BoxDecoration(color: _pdfNavyLight),
                     children: [
-                      _pdfTd('Total', bold: true),
-                      _pdfTd(totalKwh.toStringAsFixed(2), bold: true),
-                      _pdfTd(custoTotal.toStringAsFixed(2), bold: true),
-                      _pdfTd('—', bold: true),
+                      _pdfTd('Total', bold: true, color: PdfColors.white),
+                      _pdfTd(totalKwh.toStringAsFixed(2), bold: true, color: PdfColors.white),
+                      _pdfTd(custoTotal.toStringAsFixed(2), bold: true, color: PdfColors.white),
+                      _pdfTd('—', bold: true, color: PdfColors.white),
                     ]),
               ],
             ),
-          pw.SizedBox(height: 16),
-          pw.Divider(color: PdfColors.grey400),
-          pw.Text('Tarifa: ${_energyPrice.toStringAsFixed(2)} €/kWh',
-              style:
-                  const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
         ],
       ));
 
@@ -1551,11 +1637,12 @@ class _HistoricoPageState extends State<HistoricoPage> {
     }
   }
 
-  pw.Widget _pdfBox(String label, String value) => pw.Expanded(
+  pw.Widget _pdfBox(String label, String value, {PdfColor? valueColor}) =>
+      pw.Expanded(
         child: pw.Container(
           padding: const pw.EdgeInsets.all(10),
           decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.blue200),
+              border: pw.Border.all(color: _pdfTeal),
               borderRadius: pw.BorderRadius.circular(6)),
           child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1566,7 +1653,9 @@ class _HistoricoPageState extends State<HistoricoPage> {
                 pw.SizedBox(height: 4),
                 pw.Text(value,
                     style: pw.TextStyle(
-                        fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                        color: valueColor ?? _pdfNavy)),
               ]),
         ),
       );
@@ -1580,7 +1669,8 @@ class _HistoricoPageState extends State<HistoricoPage> {
                 color: PdfColors.white)),
       );
 
-  pw.Widget _pdfTd(String text, {bool bold = false, PdfColor? color}) =>
+  pw.Widget _pdfTd(String text,
+          {bool bold = false, PdfColor? color}) =>
       pw.Padding(
         padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         child: pw.Text(text,
